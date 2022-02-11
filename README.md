@@ -38,7 +38,7 @@ BiocManager::install("HTqPCR", "ddCt)
 library(shiny)
 shiny::runGitHub('qRAT', 'DaniFlat')
 ```
-or download and place the files into an app directory in your working directory and launch the app with
+or download the latest release and place the files into an app directory in your working directory and launch the app with
 ```
 library(shiny)
 runApp("qRAT")
