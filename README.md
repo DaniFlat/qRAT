@@ -14,12 +14,26 @@ qRAT is distributed as a Windows desktop application with Electron using the RIn
 
 ## How to run qRAT on Linux and MacOS?
 
-Users can run the app using R console or RStudio. 
+Users can run the app using R console and RStudio. 
 1. Upgrade to the most recent version of R and Rstudio
 2. Start RStudio and install all the R packages
 ```
+listOfPackages <- c("Bslib","DT","data.table","dplyr","ggplot2",
+                    "plotly","reshape2","scales","shiny",
+                    "shinycssloaders","shinyWidgets","shinyjs","thematic","waiter","xtable")
+for (i in listOfPackages){
+     if(! i %in% installed.packages()){
+         install.packages(i, dependencies = TRUE)
+     }
+     require(i)
+}
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("HTqPCR", "ddCt)
 ```
-4. Launch the app from R/Rstudio, either paste this in the command line:
+3. Launch the app from R/Rstudio, either paste this in the command line:
 ```
 library(shiny)
 shiny::runGitHub('qRAT', 'DaniFlat')
