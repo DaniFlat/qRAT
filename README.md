@@ -10,16 +10,22 @@ This repository contains the R scripts that are used to create the shiny app.
 
 ## How to run qRAT on Windows?
 
-qRAT is distributed as a Windows desktop application with Electron using the RInno Package. The setup can be easily downloaded and installed from the qRAT Homepage.
+qRAT is distributed as a Windows desktop application with Electron using the RInno Package. The setup can be easily downloaded and installed from the [qRAT Homepage](https://www.uibk.ac.at/microbiology/services/qrat/).
 
 ## How to run qRAT on Linux and MacOS?
 
-Users can run the app using R console or RStudio. To launch the app from R/Rstudio, either paste this in the command line:
-
+Users can run the app using R console or RStudio. 
+1. Upgrade to the most recent version of R and Rstudio
+2. Start RStudio and install all the R packages
+```
+```
+4. Launch the app from R/Rstudio, either paste this in the command line:
+```
 library(shiny)
 shiny::runGitHub('qRAT', 'DaniFlat')
-
+```
 or download and place the files into an app directory in your working directory and launch the app with
-
+```
 library(shiny)
 runApp("qRAT")
+```
