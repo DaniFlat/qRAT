@@ -43,3 +43,10 @@ or download the latest release and place the files into an app directory in your
 library(shiny)
 runApp("qRAT")
 ```
+
+## Citation
+
+If you use qRAT for any published research, please include the following citation:
+
+## Getting Help
+[qRAT Homepage](https://www.uibk.ac.at/microbiology/services/qrat/)
