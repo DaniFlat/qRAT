@@ -1,6 +1,6 @@
 ####
 # qPCR - Relative Expression Analysis Tool
-# version: 1.0.1
+# version: 1.1.0
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -71,7 +71,7 @@ read.qPCRtable <- function(fname, na.value = 40, ...) {
   tbs <- table(dt.raw$Gene)
   if (min(tbs) != max(tbs)) showNotification("Each gene should be tested in all samples", type = "error", duration = 5)
 
-  # handle Ct values
+  # handle Cq values
   xct <- dt.raw$Ct
 
   # replace "," with "."
@@ -159,7 +159,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
 
   ## check column names
   cnames <- colnames(dt.raw)
-  # if( sum(cnames == "Ct") < 1) stop("'Ct' column is required!")
+  # if( sum(cnames == "Ct") < 1) stop("'Cq' column is required!")
   # if( sum(cnames == "Well") < 1) stop("'Well' column is required!")
   # if( sum(cnames == "Gene") < 1) stop("'Gene' column is required!")
   # if( sum(cnames == "Sample") < 1 && ! any(grepl("^ds\\.", cnames)))
@@ -180,7 +180,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
   tbs <- table(dt.raw$Gene)
   # if(min(tbs) != max(tbs)) showNotification("Each gene should be tested in all samples", type="error", duration=0)
 
-  # handle Ct values
+  # handle Cq values
   xct <- dt.raw$Ct
   xct <- gsub("(Undetermined)|(No Ct)", "60", xct, ignore.case = TRUE)
 
@@ -248,7 +248,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
 
 #Calculate and return major results of HTqPCR
 
-calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, norm.method = "deltaCt", verbose = FALSE) {
+calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, adjustMethod, norm.method = "deltaCt", verbose = FALSE) {
   results <- list(result = NULL, contrast = NULL, d.norm = NULL, g.norm = NULL)
   if (is.null(dt)) {
     return(results)
@@ -309,9 +309,10 @@ calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, norm.method 
     contrasts <- makeContrasts(contrasts = vss, levels = design)
     res <- limmaCtData(d.norm,
       design = design,
-      contrasts = contrasts, ndups = 1, spacing = 1
+      contrasts = contrasts, ndups = 1, spacing = 1, adjust.method = adjustMethod
     )
   }
+  
   results$result <- res
   results$contrast <- vss
   results

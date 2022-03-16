@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 1.0.1
+# version: 1.1.0
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -78,7 +78,7 @@ ui <- page_navbar(
   # setup of theme
   theme = bs_theme(
     bootswatch = "flatly",
-    version = 4,
+    version = 5,
     font_scale = 1,
     base_font = "Helvetica",
     success = "#93c54b",
@@ -186,7 +186,7 @@ ui <- page_navbar(
     ),
     p(),
     p(),
-    p(class = "text-muted text-center", "Copyright ©2021 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
+    p(class = "text-muted text-center", "Copyright ©2021-2022 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
   ),
   tabPanel("Single Plate",
     icon = icon("stop"),
@@ -274,6 +274,8 @@ ui <- page_navbar(
           selectInput(inputId = "limma_input", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
           h5("Parameters"),
+          helpText("Adjust p-values"),
+          selectInput(inputId = "adjustMethod", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
           helpText("Choose your type of comparison"),
           radioButtons("compType", label = "Comparison Type", choices = c("Single Comparison", "Multiple paired Comparisons"), inline = TRUE),
 
@@ -389,7 +391,7 @@ ui <- page_navbar(
               )
             )
           ),
-          helpText("Choose file:"),
+          helpText("Choose file(s). Multiple files can be selected and loaded while holding the [Ctrl] key."),
           fileInput("plates", label = "Upload multiple plates here", accept = c(
             "text/csv", "text/comma-separated-values", "text/tab-separated-values",
             "text/plain", ".csv", ".txt"
@@ -474,6 +476,8 @@ ui <- page_navbar(
           selectInput(inputId = "limma_inputMulti", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
           h5("Parameters"),
+          helpText("Adjust p-values"),
+          selectInput(inputId = "adjustMethodMulti", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
           helpText("Choose your type of comparison"),
           radioButtons("compTypeM", label = "Comparison Type", choices = c("Single Comparison", "Multiple paired Comparisons"), inline = TRUE),
 

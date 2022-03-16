@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 1.0.1
+# version: 1.1.0
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -92,7 +92,7 @@ server <- function(input, output, session) {
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
-    runningVersion <- "1.0.1"
+    runningVersion <- "1.1.0"
     url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
     latestVersion <- readLines(url)
     if (runningVersion == latestVersion) {
@@ -477,6 +477,7 @@ server <- function(input, output, session) {
     Samples <- as.character(info2$Sample)
     refs <- input$Refs
     multiComps <- listOfCompsMultiple()
+    adjustMethod <- input$adjustMethod
 
     if (input$compType == "Single Comparison") {
       comp.type <- 1
@@ -485,8 +486,17 @@ server <- function(input, output, session) {
       comp.type <- 2
       comps <- multiComps
     }
+    
+    if (input$adjustMethod == "Benjamini & Hochberg") {
+      adjustMethod <- "BH"
+    } else {
+      if (input$adjustMethod == "Holm") {
+      adjustMethod <- "holm"
+      }
+      adjustMethod <- "bonferroni"
+    }
 
-    res <- calHTqPCR(dataset, refs, comps, comp.type)
+    res <- calHTqPCR(dataset, refs, comps, comp.type, adjustMethod)
     return(res)
   })
 
@@ -514,8 +524,17 @@ server <- function(input, output, session) {
       comp.type <- 2
       comps <- multiComps
     }
+    
+    if (input$adjustMethodMulti == "Benjamini & Hochberg") {
+      adjustMethod <- "BH"
+    } else {
+      if (input$adjustMethod == "Holm") {
+        adjustMethod <- "holm"
+      }
+      adjustMethod <- "bonferroni"
+    }
 
-    res <- calHTqPCR(dataset, refs, comps, comp.type)
+    res <- calHTqPCR(dataset, refs, comps, comp.type, adjustMethod)
     return(res)
   })
 
@@ -530,6 +549,7 @@ server <- function(input, output, session) {
     }
     cts <- info$contrast
     cns <- names(cts)
+    df <- info$df
     ## data.frame(cns)
     res <- NULL
     for (i in 1:length(cts)) {
@@ -873,11 +893,16 @@ server <- function(input, output, session) {
 
   output$plotCtCard <- renderPlotly({
     info <- setData()
+    hovertext <- info$PV
 
     if (is.null(info)) {
       NULL
     } else {
-      fig <- plot_ly(as.data.frame(info$PV), x = ~num, y = ~text, z = ~Ct, type = "heatmap", xgap = 1, ygap = 1, colors = "RdYlBu", colorbar = list(title = "Cq")) %>%
+      fig <- plot_ly(as.data.frame(info$PV), x = ~num, y = ~text, z = ~Ct, type = "heatmap", xgap = 1, ygap = 1, colors = "RdYlBu", colorbar = list(title = "Cq"),
+                     hoverinfo = 'text',
+                     text = ~paste("Sample:", hovertext$Sample,
+                                   "<br>Gene:", hovertext$Gene,
+                                   "<br>Cq:", hovertext$Ct)) %>%
         layout(
           title = list(text = "Plate View", y=1),
           font=t,
@@ -1206,9 +1231,13 @@ server <- function(input, output, session) {
       plateInput <- input$PlateSelect
     }
 
-    plateData <- info$MPV %>%
-      filter(PlateNumber == plateInput) %>%
-      plot_ly(x = ~num, y = ~text, z = ~Ct, type = "heatmap", colors = "RdYlBu", xgap = 1, ygap = 1, colorbar = list(title = "Cq")) %>%
+    plateData <- info$MPV %>% filter(PlateNumber == plateInput)
+    
+      plot_ly(plateData, x = ~num, y = ~text, z = ~Ct, type = "heatmap", colors = "RdYlBu", xgap = 1, ygap = 1, colorbar = list(title = "Cq"), 
+              hoverinfo = 'text',
+              text = ~paste("Sample:", plateData$Sample,
+                            "<br>Gene:", plateData$Gene,
+                            "<br>Cq:", plateData$Ct)) %>%
       layout(
         title = list(text = "Plate View", y=1),
         font=t,
@@ -1880,6 +1909,6 @@ server <- function(input, output, session) {
 
   ## running version Information of qRAT for output
   output$runningVersion <- renderText({
-    runningVersion <- "1.0.1"
+    runningVersion <- "1.1.0"
   })
 }
