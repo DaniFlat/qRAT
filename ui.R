@@ -318,7 +318,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedSingle",
               fluidRow(
-                column(6, h5("Data Table"), DT::dataTableOutput("dataSinglePlate") %>% withSpinner()), br(), br(),
+                column(5, h5("Data Table"), dataTableOutput("dataSinglePlate") %>% withSpinner()), br(), br(),
                 column(6, h5(""), plotlyOutput("plotCtCard"), plotlyOutput("plotCtDistrib"))
               )
             )
@@ -328,7 +328,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedSingle",
               fluidRow(
-                column(6, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br(),
+                column(5, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br(),
                 column(6, h5(""), plotlyOutput("SinglePlateFilterPlot"), br(), uiOutput("SinglePlateMIQEcheck")),
               ),
               fluidRow(column(12, h5(""), plotlyOutput("SinglePlateBoxplot")))
@@ -519,8 +519,8 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(6, h5("Data Table"), dataTableOutput("multiplePlatesData") %>% withSpinner(), style = "font-size: 90%; width: 90%"),
-                column(6, h5(""), plotlyOutput("MultiplotCtCard"), selectInput("PlateSelect", label = "Choose Plate", choices = ""), plotlyOutput("MultiplotCtDistrib"))
+                column(6, h5("Data Table"), dataTableOutput("multiplePlatesData") %>% withSpinner()),
+                column(6, h5(""), align="center", plotlyOutput("MultiplotCtCard"), selectInput("PlateSelect", label = "Choose Plate", choices = "", width = "20%"), plotlyOutput("MultiplotCtDistrib"))
               )
             )
           ),
@@ -530,8 +530,8 @@ ui <- page_navbar(
               condition = "output.fileUploadedMulti",
               fluidRow(
                 column(6, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep")), br(), br(),
-                column(6, h5(""), plotlyOutput("MultiplePlatesFilterPlot"), br(), uiOutput("MultiplePlateMIQEcheck"))
-              ),
+                column(5, h5(""), plotlyOutput("MultiplePlatesFilterPlot"), br(), uiOutput("MultiplePlateMIQEcheck"))
+              ), br(),
               fluidRow(column(12, h5(""), plotlyOutput("MultiplePlatesBoxplot")))
             )
           ),
@@ -540,10 +540,9 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(6, h5("Calibrated Plates"), dataTableOutput("interPlateCalibration"), style = "font-size: 80%; width: 80%"),
+                column(6, h5("Calibrated Plates"), dataTableOutput("interPlateCalibration")),
                 column(
                   6, h5("Inter-Plate Calibrators"), dataTableOutput("extractedIPCsTable"),
-                  style = "font-size: 80%; width: 80%",
                   h5("Calibration Factors"), dataTableOutput("tableCalibrationFactors")
                 )
               ), br(), br(),

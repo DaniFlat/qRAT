@@ -1217,7 +1217,7 @@ server <- function(input, output, session) {
 
   output$multiplePlatesData <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
-    if (is.null(info)) NULL else info$originalData
+    if (is.null(info)) NULL else info$originalData %>% rename(Plate = PlateNumber)
   })
 
 
@@ -1285,7 +1285,7 @@ server <- function(input, output, session) {
 
   output$dataMultiplePlatesBadRep <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
-    if (is.null(info)) NULL else multiData()$badReplicates
+    if (is.null(info)) NULL else multiData()$badReplicates %>% rename(Plate = PlateNumber)
   })
 
 
