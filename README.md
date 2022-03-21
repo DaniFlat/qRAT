@@ -18,7 +18,7 @@ Users can run the app using R console and RStudio.
 1. Upgrade to the most recent version of R and Rstudio
 2. Start RStudio and install all the R packages
 ```
-listOfPackages <- c("Bslib","DT","data.table","dplyr","ggplot2",
+listOfPackages <- c("bslib","DT","data.table","dplyr","ggplot2",
                     "plotly","reshape2","scales","shiny",
                     "shinycssloaders","shinyWidgets","shinyjs","thematic","waiter","xtable")
 for (i in listOfPackages){
