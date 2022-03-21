@@ -31,7 +31,8 @@ for (i in listOfPackages){
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("HTqPCR", "ddCt)
+BiocManager::install("HTqPCR")
+BiocManager::install("ddCt")
 ```
 3. Launch the app from R/Rstudio, either paste this in the command line:
 ```
