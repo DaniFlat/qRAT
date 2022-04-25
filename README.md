@@ -45,6 +45,10 @@ library(shiny)
 runApp("qRAT")
 ```
 
+## Web Application
+
+qRAT is available as web application on https://qrat.shinyapps.io/qrat/
+
 ## Citation
 
 If you use qRAT for any published research, please include the following citation:
