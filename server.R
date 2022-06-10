@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 1.1.0
+# version: 1.2.0
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -92,7 +92,7 @@ server <- function(input, output, session) {
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
-    runningVersion <- "1.1.0"
+    runningVersion <- "1.2.0"
     url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
     latestVersion <- readLines(url)
     if (runningVersion == latestVersion) {
@@ -121,6 +121,32 @@ server <- function(input, output, session) {
         ),
         tags$br(),
         tags$a(href = "#", "Link")
+      ),
+      html = TRUE
+    )
+  })
+  
+  # Button housekeepingInfo
+  observeEvent(input$housekeepingInfo, {
+    show_alert(
+      title = "Reference Genes",
+      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes 
+			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
+        tags$br(),
+        tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
+      ),
+      html = TRUE
+    )
+  })
+  
+  # Button housekeepingInfo Multiple Plates
+  observeEvent(input$housekeepingInfoMP, {
+    show_alert(
+      title = "Reference Genes",
+      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes 
+			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
+                       tags$br(),
+                       tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
       ),
       html = TRUE
     )
@@ -1412,15 +1438,20 @@ server <- function(input, output, session) {
 
       #SamplePicker for plotting the comparison
       SamplePicker <- input$SamplePickerIPCcomparison
+      
+      #create additional column "label" for labeling/coloring the bars in subsequent plot correctly
+      calibrated$label <- NA
+      calibrated$label <- paste("Plate", calibrated$PlateNumber, "calibrated")
+      noncalibrated$label <- NA
+      noncalibrated$label <- paste("Plate", noncalibrated$PlateNumber, "non-calibrated")
+      
       calibrated <- calibrated %>% filter(Sample_Gene %in% c(SamplePicker))
       noncalibrated <- noncalibrated %>% filter(Sample_Gene %in% c(SamplePicker))
 
       fig1 <- plot_ly(colors = "Spectral", marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>% 
         add_trace(data = as.data.frame(calibrated),
-        x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(PlateNumber), type = "bar",
-        name = "calibrated") %>% 
-        add_trace(data = as.data.frame(noncalibrated), x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(PlateNumber), type ="bar", 
-                  name = "non-calibrated", colors = "Set1") %>%
+        x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(label), type = "bar") %>% 
+        add_trace(data = as.data.frame(noncalibrated), x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(label), type ="bar") %>%
         layout(
           title = "Comparison calibrated/non-calibrated",
           font=t,
@@ -1909,6 +1940,6 @@ server <- function(input, output, session) {
 
   ## running version Information of qRAT for output
   output$runningVersion <- renderText({
-    runningVersion <- "1.1.0"
+    runningVersion <- "1.2.0"
   })
 }

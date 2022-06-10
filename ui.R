@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 1.1.0
+# version: 1.2.0
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -137,8 +137,8 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "How To?"),
-            p(class = "card-text", "Extensive documentation on data input, manipulation and graphical representation"),
-            p(class = "card-text", "License Information and Contact")
+            p(class = "card-text", "- Extensive documentation on data input, manipulation and graphical representation"),
+            p(class = "card-text", "- Checklist and most important points")
           )
         ),
         br(),
@@ -226,7 +226,7 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsSingle=='Relative dCq' || input.tabsSingle=='Relative ddCq'",
           h4("Analysis Input"),
-          h5("Housekeeping Gene(s)"),
+          h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfo")),
           helpText("Set reference gene(s)"),
           pickerInput("Refs",
             label = "Reference Genes",
@@ -429,7 +429,7 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsMulti=='Relative dCq' || input.tabsMulti=='Relative ddCq'",
           h4("Analysis Input"),
-          h5("Housekeeping Gene(s)"),
+          h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfoMP")),
           helpText("Set reference gene(s)"),
           pickerInput("RefsM",
             label = "Reference Genes",
