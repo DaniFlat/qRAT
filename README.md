@@ -18,9 +18,9 @@ Users can run the app using R console and RStudio.
 1. Upgrade to the most recent version of R and Rstudio
 2. Start RStudio and install all the R packages
 ```
-listOfPackages <- c("bslib","DT","data.table","dplyr","ggplot2",
+listOfPackages <- c("bslib","DT","data.table","dplyr","ggplot2","ggpubr","gplots",
                     "plotly","reshape2","scales","shiny",
-                    "shinycssloaders","shinyWidgets","shinyjs","thematic","waiter","xtable")
+                    "shinycssloaders","shinyWidgets","shinyjs","thematic","tidyr","waiter","xtable")
 for (i in listOfPackages){
      if(! i %in% installed.packages()){
          install.packages(i, dependencies = TRUE)
@@ -33,6 +33,7 @@ if (!require("BiocManager", quietly = TRUE))
 
 BiocManager::install("HTqPCR")
 BiocManager::install("ddCt")
+BiocManager::install("limma")
 ```
 3. Launch the app from R/Rstudio, either paste this in the command line:
 ```
