@@ -22,7 +22,6 @@ Imports:
     magrittr,
     pkgload,
     plotly,
-    reshape2,
     scales,
     shinycssloaders,
     shinyjs,
