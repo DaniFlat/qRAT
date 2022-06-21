@@ -41,7 +41,7 @@ library("ddCt")
 library("plotly")
 library("shinyjs")
 library("ggplot2")
-library("reshape2")
+#library("reshape2")
 library("scales")
 library("xtable")
 library("data.table")
@@ -93,7 +93,7 @@ ui <- page_navbar(
     waiter::use_hostess(),
     waiter::use_steward(colors = c("#325d88", "#2c3e50", "#325d88", "#6610f2")),
     waiter::waiter_preloader(html = tagList(waiter::spin_flower(), HTML(paste(tags$span(style = "font-size:17px;letter-spacing: 1.5px", "Loading"), tags$span(style = "font-size:17px;font-weight:600", "qRAT..."), sep = " ")))),
-    tags$script(src = "shinyLink.js"), # shiny Link for internal linking (to tabsets)
+    tags$script(src = "www/shinyLink.js"), # shiny Link for internal linking (to tabsets)
 
 
     # Start Page HTML
@@ -118,7 +118,7 @@ ui <- page_navbar(
           ),
           div(
             class = "col-md-4",
-            img(src = "logo.svg", class = "img-fluid", width = "80%", height = "80%")
+            img(src = "www/logo.svg", class = "img-fluid", width = "80%", height = "80%")
           )
         )
       )

@@ -312,7 +312,7 @@ calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, adjustMethod
       contrasts = contrasts, ndups = 1, spacing = 1, adjust.method = adjustMethod
     )
   }
-  
+
   results$result <- res
   results$contrast <- vss
   results

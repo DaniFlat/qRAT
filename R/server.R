@@ -41,7 +41,7 @@ library("ddCt")
 library("plotly")
 library("shinyjs")
 library("ggplot2")
-library("reshape2")
+#library("reshape2")
 library("scales")
 library("xtable")
 library("data.table")
@@ -234,6 +234,7 @@ server <- function(input, output, session) {
     } else {
       refs <- Genes[refs]
     }
+
     # Update Inputfield for Gene Input
     updatePickerInput(session, "Refs", choices = Genes, selected = refs)
 
