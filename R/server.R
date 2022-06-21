@@ -69,7 +69,7 @@ server <- function(input, output, session) {
   }
 
   waiter_hide()
-  
+
   thematic_on(
     bg = "auto",
     fg = "auto",
@@ -79,8 +79,8 @@ server <- function(input, output, session) {
     qualitative = okabe_ito(),
     inherit = FALSE
   )
-  
-  
+
+
 
   # loader for plots and tables
   w <- Waiter$new(id = c("dataSinglePlate", "ddctAbsGraph"), html = spin_loader(), color = transparent(.5))
@@ -120,12 +120,12 @@ server <- function(input, output, session) {
       html = TRUE
     )
   })
-  
+
   # Button housekeepingInfo
   observeEvent(input$housekeepingInfo, {
     show_alert(
       title = "Reference Genes",
-      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes 
+      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
 			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
         tags$br(),
         tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
@@ -133,12 +133,12 @@ server <- function(input, output, session) {
       html = TRUE
     )
   })
-  
+
   # Button housekeepingInfo Multiple Plates
   observeEvent(input$housekeepingInfoMP, {
     show_alert(
       title = "Reference Genes",
-      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes 
+      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
 			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
                        tags$br(),
                        tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
@@ -484,16 +484,16 @@ server <- function(input, output, session) {
   ## HTqPCR Single Plate
   resultHTqPCR <- reactive({
     info <- setData()
-    
+
     if (is.null(info)) {
       return(NULL)
     }
-    
+
     if (input$limma_input == "dCq") {
       dataset <- info$data.ht
     } else {
     }
-    
+
     info2 <- info$data.ht
     Samples <- as.character(info2$Sample)
     refs <- input$Refs
@@ -507,7 +507,7 @@ server <- function(input, output, session) {
       comp.type <- 2
       comps <- multiComps
     }
-    
+
     if (input$adjustMethod == "Benjamini & Hochberg") {
       adjustMethod <- "BH"
     } else {
@@ -527,12 +527,12 @@ server <- function(input, output, session) {
     if (is.null(info)) {
       return(NULL)
     }
-    
+
     if (input$limma_inputMulti == "dCq") {
       dataset <- info$data.ht
     } else {
     }
-    
+
     info2 <- info$data.ht
     Samples <- as.character(info2$Sample)
     refs <- input$RefsM
@@ -545,7 +545,7 @@ server <- function(input, output, session) {
       comp.type <- 2
       comps <- multiComps
     }
-    
+
     if (input$adjustMethodMulti == "Benjamini & Hochberg") {
       adjustMethod <- "BH"
     } else {
@@ -656,10 +656,10 @@ server <- function(input, output, session) {
     #prepare ddCt output for statistical analysis
     ddCt_stat <- expr.rel %>% select(Sample, Gene, ddCt)
     ddCt_stat <- rename(ddCt_stat, Ct = ddCt)
-    
-    
+
+
     write.table(ddCt_stat, file = "ddCtsingle.csv")
-    
+
     ## read to qPCR format
     ddCt_stat_set <- NULL
     xdata <- read.qPCRtable("ddCtsingle.csv")
@@ -821,27 +821,27 @@ server <- function(input, output, session) {
     }
   })
 
-  
+
   interPlateCalibration_Plot <- reactive({
 
     info <- interPlateCalibration()
     if (is.null(info)) NULL
-    
+
     info2 <- multiData2()
     if (is.null(info2)) NULL
-    
+
       calibrated <- info %>% unite("Sample_Gene", Sample:Gene, remove = FALSE)
       noncalibrated <- info2$SamplesNoIPCs %>% unite("Sample_Gene", Sample:Gene, remove = FALSE)
-      
+
       SamplesIPCcomparison <- unique(calibrated$Sample_Gene)
       updatePickerInput(session, "SamplePickerIPCcomparison", choices = SamplesIPCcomparison, selected = "")
-      
+
       return(list(calibrated = calibrated, noncalibrated = noncalibrated))
- 
-     
+
+
   })
-  
-  
+
+
   # table options
   table_options <- function() {
     list(
@@ -900,7 +900,7 @@ server <- function(input, output, session) {
   ## Raw Data Table Single Plate Original Data
 
 
-  output$dataSinglePlate <- DT::renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataSinglePlate <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- setData()
 
     if (is.null(info)) {
@@ -950,7 +950,7 @@ server <- function(input, output, session) {
       scale_color_brewer(palette = "Set1")+
       theme_pubr(base_size=4.76 * .pt)+
       list(ggplottheme)
-    
+
     ggplotly(fig) %>%
       layout(
         title = list(text = "Cq Distribution", y=1),
@@ -969,7 +969,7 @@ server <- function(input, output, session) {
 
   ## Single Plate Show bad replicates Table
 
-  output$dataSinglePlateBadRep <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataSinglePlateBadRep <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- setData()
     if (is.null(info)) NULL else setData()$badReplicates
   })
@@ -1038,7 +1038,7 @@ server <- function(input, output, session) {
 
   ## dCt Expression Data Table Single Plate
 
-  output$ddctAbsolute <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctAbsolute <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdct()
     if (is.null(info)) {
       return(NULL)
@@ -1087,25 +1087,25 @@ server <- function(input, output, session) {
 
     df <- info$absolute %>%
       filter(Sample %in% input$SamplePicker)
-    
-    
+
+
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
                            colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
-      
+
       if (scalePick == "normal") {
         fig <- figNormal
       } else {
         fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
       }
-      
+
     } else {
-      
-      
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick), 
-                                                    ymin = get(PlotDataPick) - get(PlotDataError), 
+
+
+      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
+                                                    ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
           aes(fill = Gene),
@@ -1114,8 +1114,8 @@ server <- function(input, output, session) {
         scale_fill_brewer(palette = colorPick)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
-      
-      
+
+
       if (scalePick == "normal") {
         fig <- ggplotly(figNormal)
       } else {
@@ -1123,9 +1123,9 @@ server <- function(input, output, session) {
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
         fig <- ggplotly(fig)
       }
-      
+
     }
-    
+
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1133,13 +1133,13 @@ server <- function(input, output, session) {
       ) %>%
       layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
       layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
-    
+
     fig
   })
 
   ## ddCt Expression Data Table Single Plate
 
-  output$ddctRelative <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctRelative <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdct()
     if (is.null(info)) {
       return(NULL)
@@ -1178,7 +1178,7 @@ server <- function(input, output, session) {
       PlotDataPick <- "ddCt"
       yTitle <- "\u0394\u0394Cq"
     }
-    
+
 
 
     if (PlotType == "Bar Chart") {
@@ -1186,18 +1186,18 @@ server <- function(input, output, session) {
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
                            colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
-      
+
       if (scalePick == "normal") {
         fig <- figNormal
       } else {
         fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
       }
-      
+
     } else {
-      
-      
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick), 
-                                                    ymin = get(PlotDataPick) - get(PlotDataError), 
+
+
+      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
+                                                    ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
           aes(fill = Gene),
@@ -1206,8 +1206,8 @@ server <- function(input, output, session) {
         scale_fill_brewer(palette = colorPick)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
-      
-      
+
+
       if (scalePick == "normal") {
         fig <- ggplotly(figNormal)
       } else {
@@ -1215,9 +1215,9 @@ server <- function(input, output, session) {
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
         fig <- ggplotly(fig)
       }
-      
+
     }
-    
+
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1225,7 +1225,7 @@ server <- function(input, output, session) {
       ) %>%
       layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
       layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
-    
+
     fig
   })
 
@@ -1236,7 +1236,7 @@ server <- function(input, output, session) {
 
   ## Raw Data Table Multiple Plates
 
-  output$multiplePlatesData <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$multiplePlatesData <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
     if (is.null(info)) NULL else info$originalData %>% rename(Plate = PlateNumber)
   })
@@ -1253,8 +1253,8 @@ server <- function(input, output, session) {
     }
 
     plateData <- info$MPV %>% filter(PlateNumber == plateInput)
-    
-      plot_ly(plateData, x = ~num, y = ~text, z = ~Ct, type = "heatmap", colors = "RdYlBu", xgap = 1, ygap = 1, colorbar = list(title = "Cq"), 
+
+      plot_ly(plateData, x = ~num, y = ~text, z = ~Ct, type = "heatmap", colors = "RdYlBu", xgap = 1, ygap = 1, colorbar = list(title = "Cq"),
               hoverinfo = 'text',
               text = ~paste("Sample:", plateData$Sample,
                             "<br>Gene:", plateData$Gene,
@@ -1284,7 +1284,7 @@ server <- function(input, output, session) {
       scale_color_brewer(palette = "Set1")+
       theme_pubr(base_size=4.76 * .pt)+
       list(ggplottheme)
-    
+
     ggplotly(fig) %>%
       layout(
         title = list(text = "Cq Distribution", y=1),
@@ -1304,7 +1304,7 @@ server <- function(input, output, session) {
 
   ## Data Table Multiple Plates Show bad replicates
 
-  output$dataMultiplePlatesBadRep <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataMultiplePlatesBadRep <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
     if (is.null(info)) NULL else multiData()$badReplicates %>% rename(Plate = PlateNumber)
   })
@@ -1374,7 +1374,7 @@ server <- function(input, output, session) {
 
   ## Extracted IPCs Multiple Plates
 
-  output$extractedIPCsTable <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$extractedIPCsTable <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     if (input$Id027 == TRUE) {
       info <- extractIPCs()
       if (is.null(info)) NULL else select(extractIPCs()$extrIPCs, -TempRepNum) # remove TempRepNum for displaying the table because this was just an internal variable
@@ -1385,7 +1385,7 @@ server <- function(input, output, session) {
 
   ## Calibration Factors Table
 
-  output$tableCalibrationFactors <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, {
+  output$tableCalibrationFactors <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, {
     if (input$Id027 == TRUE) {
       data <- extractIPCs()
       if (is.null(data)) NULL else data$CalibrationFactors %>% mutate(across(where(is.numeric), round, 4))
@@ -1394,7 +1394,7 @@ server <- function(input, output, session) {
 
   ## Inter-Plate Ct values, calibrated with calibration factor
 
-  output$interPlateCalibration <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$interPlateCalibration <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     if (input$Id027 == TRUE) {
       data <- interPlateCalibration()
       if (is.null(data)) NULL else data %>% mutate(across(where(is.numeric), round, 2))
@@ -1409,43 +1409,43 @@ server <- function(input, output, session) {
       info <- interPlateCalibration_Plot()
       if (is.null(info)) NULL
 
-      calibrated <- info$calibrated  %>% 
+      calibrated <- info$calibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
         dplyr::summarize(MeanCq = mean(Ct, na.rm=TRUE))
-      calibrated_sd <- info$calibrated  %>% 
+      calibrated_sd <- info$calibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
         dplyr::summarize(sdCq = sd(Ct, na.rm = TRUE))
       calibrated <- data.frame(calibrated, calibrated_sd$sdCq)
       calibrated <- rename(calibrated, c("sdCq" = "calibrated_sd.sdCq"))
-      
-      
-      noncalibrated <- info$noncalibrated  %>% 
+
+
+      noncalibrated <- info$noncalibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
         dplyr::summarize(MeanCq = mean(Ct, na.rm=TRUE))
-      noncalibrated_sd <- info$noncalibrated  %>% 
+      noncalibrated_sd <- info$noncalibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
         dplyr::summarize(sdCq = sd(Ct, na.rm = TRUE))
       noncalibrated <- data.frame(noncalibrated, noncalibrated_sd$sdCq)
       noncalibrated <- rename(noncalibrated, c("sdCq" = "noncalibrated_sd.sdCq"))
-      
-      
-      
+
+
+
 
       #SamplePicker for plotting the comparison
       SamplePicker <- input$SamplePickerIPCcomparison
-      
+
       #create additional column "label" for labeling/coloring the bars in subsequent plot correctly
       calibrated$label <- NA
       calibrated$label <- paste("Plate", calibrated$PlateNumber, "calibrated")
       noncalibrated$label <- NA
       noncalibrated$label <- paste("Plate", noncalibrated$PlateNumber, "non-calibrated")
-      
+
       calibrated <- calibrated %>% filter(Sample_Gene %in% c(SamplePicker))
       noncalibrated <- noncalibrated %>% filter(Sample_Gene %in% c(SamplePicker))
 
-      fig1 <- plot_ly(colors = "Spectral", marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>% 
+      fig1 <- plot_ly(colors = "Spectral", marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         add_trace(data = as.data.frame(calibrated),
-        x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(label), type = "bar") %>% 
+        x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(label), type = "bar") %>%
         add_trace(data = as.data.frame(noncalibrated), x = ~Sample_Gene, y = ~MeanCq, color = ~as.character(label), type ="bar") %>%
         layout(
           title = "Comparison calibrated/non-calibrated",
@@ -1456,19 +1456,19 @@ server <- function(input, output, session) {
           bargroupgap = 0.1,
           margin = list(t = 50),
           legend=list(title=list(text='Plates'))
-        ) %>% 
+        ) %>%
         config(
           displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
           toImageButtonOptions = list(format = "png", scale = 3, width=768, height=768), scrollZoom = TRUE, displayModeBar = TRUE
         )  %>%
         layout(yaxis = list(title = "Mean Cq"), xaxis = list(title = "Sample"), font=t)
-      
+
     } else {}
   })
 
   ## dCt Gene Expression Table Multiple Plates
 
-  output$ddctAbsoluteMulti <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctAbsoluteMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdctMulti()
     if (is.null(info)) {
       return(NULL)
@@ -1502,7 +1502,7 @@ server <- function(input, output, session) {
       PlotDataError <- "expr.sd"
       PlotDataPick <- "expr"
       yTitle <- "relative quantity"
-      
+
     } else {
       if (PlotDataPick == "-dCq") {
         PlotDataError <- "dCt.sd"
@@ -1525,18 +1525,18 @@ server <- function(input, output, session) {
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
                            colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
-      
+
       if (scalePick == "normal") {
         fig <- figNormal
       } else {
         fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
       }
-      
+
     } else {
-      
-      
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick), 
-                                                    ymin = get(PlotDataPick) - get(PlotDataError), 
+
+
+      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
+                                                    ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
           aes(fill = Gene),
@@ -1545,8 +1545,8 @@ server <- function(input, output, session) {
         scale_fill_brewer(palette = colorPick)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
-      
-      
+
+
       if (scalePick == "normal") {
         fig <- ggplotly(figNormal)
       } else {
@@ -1554,9 +1554,9 @@ server <- function(input, output, session) {
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
         fig <- ggplotly(fig)
       }
-      
+
     }
-    
+
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1564,13 +1564,13 @@ server <- function(input, output, session) {
       ) %>%
       layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
       layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
-    
+
     fig
   })
 
   ## ddCq Gene Expression Table Multiple Plates
 
-  output$ddctRelativeMulti <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctRelativeMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdctMulti()
     if (is.null(info)) {
       return(NULL)
@@ -1616,18 +1616,18 @@ server <- function(input, output, session) {
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
                            colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
-      
+
       if (scalePick == "normal") {
         fig <- figNormal
       } else {
         fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
       }
-      
+
     } else {
-      
-      
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick), 
-                                                    ymin = get(PlotDataPick) - get(PlotDataError), 
+
+
+      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
+                                                    ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
           aes(fill = Gene),
@@ -1636,8 +1636,8 @@ server <- function(input, output, session) {
         scale_fill_brewer(palette = colorPick)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
-      
-      
+
+
       if (scalePick == "normal") {
         fig <- ggplotly(figNormal)
       } else {
@@ -1645,9 +1645,9 @@ server <- function(input, output, session) {
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
         fig <- ggplotly(fig)
       }
-      
+
     }
-    
+
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1655,7 +1655,7 @@ server <- function(input, output, session) {
       ) %>%
       layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
       layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
-    
+
     fig
   })
 
@@ -1761,7 +1761,7 @@ server <- function(input, output, session) {
 
   ## Limma Outputs
 
-  output$resultLimma <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$resultLimma <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimma()
     if (is.null(dt)) {
       return(NULL)
@@ -1780,7 +1780,7 @@ server <- function(input, output, session) {
       mutate(across(where(is.numeric), round, 4))
   })
 
-  output$resultLimmaMulti <- renderDataTable(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$resultLimmaMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimmaMulti()
     if (is.null(dt)) {
       return(NULL)
