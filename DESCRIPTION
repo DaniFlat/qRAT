@@ -10,6 +10,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.0
 Imports: 
+    shiny,
     bslib,
     data.table,
     ddCt,
@@ -23,7 +24,6 @@ Imports:
     plotly,
     reshape2,
     scales,
-    shiny,
     shinycssloaders,
     shinyjs,
     shinyWidgets,
