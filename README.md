@@ -16,18 +16,8 @@ qRAT is distributed as a Windows desktop application with Electron using the RIn
 
 Users can run the app using R console and RStudio. 
 1. Upgrade to the most recent version of R and Rstudio
-2. Start RStudio and install all the R packages
+2. Start RStudio and install all the bioconductor packages by entering the following commands in the console
 ```
-listOfPackages <- c("bslib","DT","data.table","dplyr","ggplot2","ggpubr","gplots",
-                    "plotly","reshape2","scales","shiny",
-                    "shinycssloaders","shinyWidgets","shinyjs","thematic","tidyr","waiter","xtable")
-for (i in listOfPackages){
-     if(! i %in% installed.packages()){
-         install.packages(i, dependencies = TRUE)
-     }
-     require(i)
-}
-
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
@@ -35,15 +25,11 @@ BiocManager::install("HTqPCR")
 BiocManager::install("ddCt")
 BiocManager::install("limma")
 ```
-3. Launch the app from R/Rstudio, either paste this in the command line:
+3. Install the qRAT package with devtools from github by executing the following commands
 ```
-library(shiny)
-shiny::runGitHub('qRAT', 'DaniFlat')
-```
-or download the latest release and place the files into an app directory in your working directory and launch the app with
-```
-library(shiny)
-runApp("qRAT")
+## install.packages('devtools')
+require('devtools')
+install_github('DaniFlat/qRAT')
 ```
 
 ## Web Application
