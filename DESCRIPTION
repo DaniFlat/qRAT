@@ -1,0 +1,34 @@
+Package: qRAT
+Title: qPCR relative expression analysis tool
+Version: 0.1.3
+Authors@R: 
+    person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-8221-9695"))
+Description: qRAT is
+License: `use_mit_license()`
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.0
+Imports: 
+    bslib,
+    data.table,
+    ddCt,
+    dplyr,
+    DT,
+    ggplot2,
+    ggpubr,
+    HTqPCR,
+    magrittr,
+    pkgload,
+    plotly,
+    reshape2,
+    scales,
+    shiny,
+    shinycssloaders,
+    shinyjs,
+    shinyWidgets,
+    stringr,
+    thematic,
+    tidyr,
+    waiter,
+    xtable
