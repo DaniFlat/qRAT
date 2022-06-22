@@ -224,7 +224,7 @@ ui <- page_navbar(
           h4("Analysis Input"),
           h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfo")),
           helpText("Set reference gene(s)"),
-          pickerInput("Refs",
+          selectInput("Refs",
             label = "Reference Genes",
             choices = attr("Refs", "Labels"),
             multiple = TRUE
@@ -235,7 +235,7 @@ ui <- page_navbar(
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
           selectInput(inputId = "PlotData", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          pickerInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE, options = list("actions-box" = TRUE)),
+          selectInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE),
           selectInput(inputId = "PlotType", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
           selectInput(inputId = "colorpicker", label = "Pick Colors", choices = colorlist),
           selectInput(inputId = "scale", label = "Scale", choices = c("normal", "log")),
@@ -254,7 +254,7 @@ ui <- page_navbar(
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
           selectInput(inputId = "PlotDataDDCt", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          pickerInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
+          selectInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
           selectInput(inputId = "PlotTypeDDCt", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
           selectInput(inputId = "colorpickerDDCt", label = "Pick Colors", choices = colorlist),
           selectInput(inputId = "scaleDDCt", label = "Scale", choices = c("normal", "log")),
@@ -324,8 +324,11 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedSingle",
               fluidRow(
-                column(5, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br(),
-                column(6, h5(""), plotlyOutput("SinglePlateFilterPlot"), br(), uiOutput("SinglePlateMIQEcheck")),
+                column(12,
+                       fluidRow(
+                        column(7, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br(),
+                        column(5, h5(""), plotlyOutput("SinglePlateFilterPlot"), br(), uiOutput("SinglePlateMIQEcheck"))
+                        )),
               ),
               fluidRow(column(12, h5(""), plotlyOutput("SinglePlateBoxplot")))
             )
@@ -416,7 +419,7 @@ ui <- page_navbar(
           helpText("Set Sample as Inter-Plate calibrator"),
           selectInput("IPC", label = "IPC", choices = ""),
           helpText("Choose Samples for Comparison-Plot"),
-          pickerInput("SamplePickerIPCcomparison",
+          selectInput("SamplePickerIPCcomparison",
                       label = "Samples to Plot",
                       choices = "",
                       multiple = TRUE
@@ -427,7 +430,7 @@ ui <- page_navbar(
           h4("Analysis Input"),
           h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfoMP")),
           helpText("Set reference gene(s)"),
-          pickerInput("RefsM",
+          selectInput("RefsM",
             label = "Reference Genes",
             choices = attr("Refs", "Labels"),
             multiple = TRUE
@@ -438,7 +441,7 @@ ui <- page_navbar(
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
           selectInput(inputId = "PlotDataMulti", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          pickerInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE, options = list("actions-box" = TRUE)),
+          selectInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE),
           selectInput(inputId = "PlotTypeMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
           selectInput(inputId = "colorpickerMulti", label = "Pick Colors", choices = colorlist),
           selectInput(inputId = "scaleMulti", label = "Scale", choices = c("normal", "log")),
@@ -456,7 +459,7 @@ ui <- page_navbar(
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
           selectInput(inputId = "PlotDataDDCtMulti", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          pickerInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
+          selectInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
           selectInput(inputId = "PlotTypeDDCtMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
           selectInput(inputId = "colorpickerDDCtMulti", label = "Pick Colors", choices = colorlist),
           selectInput(inputId = "scaleDDCtMulti", label = "Scale", choices = c("normal", "log")),
@@ -525,7 +528,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(6, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep")), br(), br(),
+                column(7, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep")), br(), br(),
                 column(5, h5(""), plotlyOutput("MultiplePlatesFilterPlot"), br(), uiOutput("MultiplePlateMIQEcheck"))
               ), br(),
               fluidRow(column(12, h5(""), plotlyOutput("MultiplePlatesBoxplot")))

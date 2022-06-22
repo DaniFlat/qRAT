@@ -234,9 +234,9 @@ server <- function(input, output, session) {
     } else {
       refs <- Genes[refs]
     }
-
+    print(Genes)
     # Update Inputfield for Gene Input
-    updatePickerInput(session, "Refs", choices = Genes, selected = refs)
+    updateSelectInput(session, "Refs", choices = Genes, selected = refs)
 
     ## read to qPCR format single plate
     htset <- NULL
@@ -453,7 +453,7 @@ server <- function(input, output, session) {
     } else {
       refs <- Genes[refs]
     }
-    updatePickerInput(session, "RefsM", choices = Genes, selected = refs)
+    updateSelectInput(session, "RefsM", choices = Genes, selected = refs)
 
 
 
@@ -651,8 +651,8 @@ server <- function(input, output, session) {
     SamplesddCt <- unique(as.character(expr.rel$Sample))
 
     # Update Inputfields (Plot Settings and Input Settings)
-    updatePickerInput(session, "SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
-    updatePickerInput(session, "SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
+    updateSelectInput(session, "SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
+    updateSelectInput(session, "SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
 
     #prepare ddCt output for statistical analysis
     ddCt_stat <- expr.rel %>% select(Sample, Gene, ddCt)
@@ -722,8 +722,8 @@ server <- function(input, output, session) {
     SamplesddCtMulti <- unique(as.character(expr.rel$Sample))
 
     # Update Inputfields (Plot Settings and Input Settings)
-    updatePickerInput(session, "SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
-    updatePickerInput(session, "SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
+    updateSelectInput(session, "SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
+    updateSelectInput(session, "SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
 
     ## updateRadioButtons(session, 'geneNameRel', choices=targets, selected=targets[1])
     ## updateCheckboxGroupInput(session, 'geneNameAbs', choices=targets, selected=targets)
@@ -835,7 +835,7 @@ server <- function(input, output, session) {
       noncalibrated <- info2$SamplesNoIPCs %>% unite("Sample_Gene", Sample:Gene, remove = FALSE)
 
       SamplesIPCcomparison <- unique(calibrated$Sample_Gene)
-      updatePickerInput(session, "SamplePickerIPCcomparison", choices = SamplesIPCcomparison, selected = "")
+      updateSelectInput(session, "SamplePickerIPCcomparison", choices = SamplesIPCcomparison, selected = "")
 
       return(list(calibrated = calibrated, noncalibrated = noncalibrated))
 
