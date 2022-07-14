@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.3
+# version: 0.1.4
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -204,8 +204,8 @@ ui <- page_navbar(
               )
             )
           ),
-          helpText("Choose file:"),
-          fileInput("dtfile", label = "Upload single plate here", accept = c(
+          helpText("Choose your file (csv or txt). See >Help< to download example data file."),
+          fileInput("dtfile", label = "Upload single plate data file here", accept = c(
             "text/csv", "text/comma-separated-values", "text/tab-separated-values",
             "text/plain", ".csv", ".txt"
           )),
@@ -218,13 +218,19 @@ ui <- page_navbar(
           sliderInput("maxCt", "Cq Cut-off", min = 0, max = 45, value = c(5, 35), step = 1),
           helpText("Set max deviation between replicates (from mean)"),
           sliderInput("repDev", "Replicate Variability", min = 0, max = 2, value = 0.3, step = 0.01),
+          h5("Experimental Controls"),
+          helpText("Choose NTC(s) or RT- to be excluded from calculations. If the sample set does not include NTC(s) or RT- leave Input blank."),
+          virtualSelectInput(inputId = "NTC_Input",
+                      label = "Select NTC and RT- Samples",
+                      choices = attr("NTCs", "Labels"),
+                      multiple = TRUE),
         ),
         conditionalPanel(
           condition = "input.tabsSingle=='Relative dCq' || input.tabsSingle=='Relative ddCq'",
           h4("Analysis Input"),
           h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfo")),
           helpText("Set reference gene(s)"),
-          selectInput("Refs",
+          virtualSelectInput("Refs",
             label = "Reference Genes",
             choices = attr("Refs", "Labels"),
             multiple = TRUE
@@ -234,13 +240,13 @@ ui <- page_navbar(
           condition = "input.tabsSingle=='Relative dCq'",
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
-          selectInput(inputId = "PlotData", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          selectInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE),
-          selectInput(inputId = "PlotType", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          selectInput(inputId = "colorpicker", label = "Pick Colors", choices = colorlist),
-          selectInput(inputId = "scale", label = "Scale", choices = c("normal", "log")),
+          virtualSelectInput(inputId = "PlotData", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
+          virtualSelectInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE),
+          virtualSelectInput(inputId = "PlotType", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+          virtualSelectInput(inputId = "colorpicker", label = "Pick Colors", choices = colorlist),
+          virtualSelectInput(inputId = "scale", label = "Scale", choices = c("normal", "log")),
           h5("Plot Export"),
-          selectInput(inputId = "exportFormat", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+          virtualSelectInput(inputId = "exportFormat", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
           numericInput("width_dCq", label = "Width", value = 800),
           numericInput("height_dCq", label = "Height", value = 800),
           numericInput("scale_dCq", label = "Scale", value = 3),
@@ -250,15 +256,15 @@ ui <- page_navbar(
           condition = "input.tabsSingle=='Relative ddCq'",
           h5("Calibrator"),
           helpText("Set Calibrator for ddCq"),
-          selectInput("Mock", label = "Calibrator", choices = ""),
+          virtualSelectInput("Mock", label = "Calibrator", choices = ""),
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
-          selectInput(inputId = "PlotDataDDCt", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          selectInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
-          selectInput(inputId = "PlotTypeDDCt", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          selectInput(inputId = "colorpickerDDCt", label = "Pick Colors", choices = colorlist),
-          selectInput(inputId = "scaleDDCt", label = "Scale", choices = c("normal", "log")),
-          selectInput(inputId = "exportFormatDDCt", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+          virtualSelectInput(inputId = "PlotDataDDCt", label = "Plot Data", choices = c("Fold Change", "ddCt")),
+          virtualSelectInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
+          virtualSelectInput(inputId = "PlotTypeDDCt", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+          virtualSelectInput(inputId = "colorpickerDDCt", label = "Pick Colors", choices = colorlist),
+          virtualSelectInput(inputId = "scaleDDCt", label = "Scale", choices = c("normal", "log")),
+          virtualSelectInput(inputId = "exportFormatDDCt", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
           numericInput("width_ddCq", label = "Width", value = 800),
           numericInput("height_ddCq", label = "Height", value = 800),
           numericInput("scale_ddCq", label = "Scale", value = 3),
@@ -267,11 +273,11 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsSingle=='Statistical Analysis'",
           h4("Analysis Input"),
-          selectInput(inputId = "limma_input", label = "Limma Input", choices = c("dCq")),
+          virtualSelectInput(inputId = "limma_input", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
           h5("Parameters"),
           helpText("Adjust p-values"),
-          selectInput(inputId = "adjustMethod", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
+          virtualSelectInput(inputId = "adjustMethod", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
           helpText("Choose your type of comparison"),
           radioButtons("compType", label = "Comparison Type", choices = c("Single Comparison", "Multiple paired Comparisons"), inline = TRUE),
 
@@ -279,7 +285,7 @@ ui <- page_navbar(
           conditionalPanel(
             condition = "input.compType=='Single Comparison'",
             helpText("Choose a single control:"),
-            selectInput("Comps", label = "Single Comparison", choices = "")
+            virtualSelectInput("Comps", label = "Single Comparison", choices = "")
           ),
           #### Single Comparison Settings End
 
@@ -287,10 +293,10 @@ ui <- page_navbar(
           conditionalPanel(
             condition = "input.compType=='Multiple paired Comparisons'",
             h5("Multiple Comparisons"),
-            helpText("Add as many paired comparisons as you like. Choose two samples you want to compare:"),
+            helpText("Add as many paired comparisons as you like. Choose two samples you want to compare:"), br(),
             # helpText("Number of comparisons:"), textOutput("comparisonBoxes_counter"),
-            actionButton("add_btn", "Add Comparison", class = "btn-primary"),
-            actionButton("rm_btn", "Remove Comparison", class = "btn-danger"),
+            actionButton("add_btn", "Add Comparison", class = "btn-primary"), br(),
+            actionButton("rm_btn", "Remove Comparison", class = "btn-danger"), br(),
             uiOutput("comparisonBoxes_ui")
           )
           #### Multiple Comparisons Settings End
@@ -326,10 +332,11 @@ ui <- page_navbar(
               fluidRow(
                 column(12,
                        fluidRow(
-                        column(7, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br(),
-                        column(5, h5(""), plotlyOutput("SinglePlateFilterPlot"), br(), uiOutput("SinglePlateMIQEcheck"))
+                        column(12, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br()
                         )),
               ),
+              fluidRow(column(6, h5(""), plotlyOutput("SinglePlateFilterPlot")),
+                       column(6, h5(""), uiOutput("SinglePlateMIQEcheck"))),
               fluidRow(column(12, h5(""), plotlyOutput("SinglePlateBoxplot")))
             )
           ),
@@ -390,8 +397,9 @@ ui <- page_navbar(
               )
             )
           ),
-          helpText("Choose file(s). Multiple files can be selected and loaded while holding the [Ctrl] key."),
-          fileInput("plates", label = "Upload multiple plates here", accept = c(
+          helpText("Choose your files (csv or txt). Multiple files can be selected and loaded while holding the [Ctrl] key.
+                   See >Help< to download example data files."),
+          fileInput("plates", label = "Upload multiple plates data files here", accept = c(
             "text/csv", "text/comma-separated-values", "text/tab-separated-values",
             "text/plain", ".csv", ".txt"
           ), multiple = TRUE)
@@ -404,6 +412,10 @@ ui <- page_navbar(
           sliderInput("maxCtMulti", "Cq Cut-off", min = 0, max = 45, value = c(5, 35), step = 1),
           helpText("Set max deviation between replicates (from mean)"),
           sliderInput("repDevMulti", "Replicate Variability", min = 0, max = 2, value = 0.3, step = 0.01),
+          virtualSelectInput(inputId = "NTC_Input_MP",
+                      label = "Select NTC and RT- Samples",
+                      choices = attr("MP_NTCs", "Labels"),
+                      multiple = TRUE),
         ),
         conditionalPanel(
           condition = "input.tabsMulti=='Inter-Plate Calibration'",
@@ -417,9 +429,9 @@ ui <- page_navbar(
             fill = TRUE
           ),
           helpText("Set Sample as Inter-Plate calibrator"),
-          selectInput("IPC", label = "IPC", choices = ""),
+          virtualSelectInput("IPC", label = "IPC", choices = ""),
           helpText("Choose Samples for Comparison-Plot"),
-          selectInput("SamplePickerIPCcomparison",
+          virtualSelectInput("SamplePickerIPCcomparison",
                       label = "Samples to Plot",
                       choices = "",
                       multiple = TRUE
@@ -430,7 +442,7 @@ ui <- page_navbar(
           h4("Analysis Input"),
           h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfoMP")),
           helpText("Set reference gene(s)"),
-          selectInput("RefsM",
+          virtualSelectInput("RefsM",
             label = "Reference Genes",
             choices = attr("Refs", "Labels"),
             multiple = TRUE
@@ -440,12 +452,12 @@ ui <- page_navbar(
           condition = "input.tabsMulti=='Relative dCq'",
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
-          selectInput(inputId = "PlotDataMulti", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          selectInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE),
-          selectInput(inputId = "PlotTypeMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          selectInput(inputId = "colorpickerMulti", label = "Pick Colors", choices = colorlist),
-          selectInput(inputId = "scaleMulti", label = "Scale", choices = c("normal", "log")),
-          selectInput(inputId = "exportFormatMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+          virtualSelectInput(inputId = "PlotDataMulti", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
+          virtualSelectInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE),
+          virtualSelectInput(inputId = "PlotTypeMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+          virtualSelectInput(inputId = "colorpickerMulti", label = "Pick Colors", choices = colorlist),
+          virtualSelectInput(inputId = "scaleMulti", label = "Scale", choices = c("normal", "log")),
+          virtualSelectInput(inputId = "exportFormatMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
           numericInput("width_dCqMulti", label = "Width", value = 800),
           numericInput("height_dCqMulti", label = "Height", value = 800),
           numericInput("scale_dCqMulti", label = "Scale", value = 3),
@@ -455,15 +467,15 @@ ui <- page_navbar(
           condition = "input.tabsMulti=='Relative ddCq'",
           h5("Calibrator"),
           helpText("Set calibrator for ddCq"),
-          selectInput("MockM", label = "Calibrator", choices = ""),
+          virtualSelectInput("MockM", label = "Calibrator", choices = ""),
           h5("Plot Settings"),
           helpText("Customize Plot Appearance"),
-          selectInput(inputId = "PlotDataDDCtMulti", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          selectInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
-          selectInput(inputId = "PlotTypeDDCtMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          selectInput(inputId = "colorpickerDDCtMulti", label = "Pick Colors", choices = colorlist),
-          selectInput(inputId = "scaleDDCtMulti", label = "Scale", choices = c("normal", "log")),
-          selectInput(inputId = "exportFormatDDCtMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+          virtualSelectInput(inputId = "PlotDataDDCtMulti", label = "Plot Data", choices = c("Fold Change", "ddCt")),
+          virtualSelectInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
+          virtualSelectInput(inputId = "PlotTypeDDCtMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+          virtualSelectInput(inputId = "colorpickerDDCtMulti", label = "Pick Colors", choices = colorlist),
+          virtualSelectInput(inputId = "scaleDDCtMulti", label = "Scale", choices = c("normal", "log")),
+          virtualSelectInput(inputId = "exportFormatDDCtMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
           numericInput("width_ddCqMulti", label = "Width", value = 800),
           numericInput("height_ddCqMulti", label = "Height", value = 800),
           numericInput("scale_ddCqMulti", label = "Scale", value = 3),
@@ -472,11 +484,11 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsMulti=='Statistical Analysis'",
           h4("Analysis Input"),
-          selectInput(inputId = "limma_inputMulti", label = "Limma Input", choices = c("dCq")),
+          virtualSelectInput(inputId = "limma_inputMulti", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
           h5("Parameters"),
           helpText("Adjust p-values"),
-          selectInput(inputId = "adjustMethodMulti", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
+          virtualSelectInput(inputId = "adjustMethodMulti", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
           helpText("Choose your type of comparison"),
           radioButtons("compTypeM", label = "Comparison Type", choices = c("Single Comparison", "Multiple paired Comparisons"), inline = TRUE),
 
@@ -484,7 +496,7 @@ ui <- page_navbar(
           conditionalPanel(
             condition = "input.compTypeM=='Single Comparison'",
             helpText("Choose a single control:"),
-            selectInput("CompsM", label = "Single Comparison", choices = "")
+            virtualSelectInput("CompsM", label = "Single Comparison", choices = "")
           ),
           #### Single Comparison Settings End
 
@@ -492,9 +504,9 @@ ui <- page_navbar(
           conditionalPanel(
             condition = "input.compTypeM=='Multiple paired Comparisons'",
             h5("Multiple Comparisons"),
-            helpText("Add as many paired comparisons as you like. Choose two samples you want to compare:"),
-            actionButton("add_btnM", "Add Comparison", class = "btn-primary"),
-            actionButton("rm_btnM", "Remove Comparison", class = "btn-danger"),
+            helpText("Add as many paired comparisons as you like. Choose two samples you want to compare:"), br(),
+            actionButton("add_btnM", "Add Comparison", class = "btn-primary"), br(),
+            actionButton("rm_btnM", "Remove Comparison", class = "btn-danger"), br(),
             uiOutput("comparisonBoxesM_ui")
           )
           #### Multiple Comparisons Settings End
@@ -519,7 +531,7 @@ ui <- page_navbar(
               condition = "output.fileUploadedMulti",
               fluidRow(
                 column(6, h5("Data Table"), dataTableOutput("multiplePlatesData") %>% withSpinner()),
-                column(6, h5(""), align="center", plotlyOutput("MultiplotCtCard"), selectInput("PlateSelect", label = "Choose Plate", choices = "", width = "20%"), plotlyOutput("MultiplotCtDistrib"))
+                column(6, h5(""), align="center", plotlyOutput("MultiplotCtCard"), virtualSelectInput("PlateSelect", label = "Choose Plate", choices = "", width = "20%"), plotlyOutput("MultiplotCtDistrib"))
               )
             )
           ),
@@ -528,9 +540,10 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(7, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep")), br(), br(),
-                column(5, h5(""), plotlyOutput("MultiplePlatesFilterPlot"), br(), uiOutput("MultiplePlateMIQEcheck"))
-              ), br(),
+                column(12, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep"))), br(), br(),
+              fluidRow(
+                column(6, h5(""), plotlyOutput("MultiplePlatesFilterPlot")),
+                column(6, h5(""), uiOutput("MultiplePlateMIQEcheck"))), br(),
               fluidRow(column(12, h5(""), plotlyOutput("MultiplePlatesBoxplot")))
             )
           ),

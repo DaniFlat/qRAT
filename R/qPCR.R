@@ -1,6 +1,6 @@
 ####
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.3
+# version: 0.1.4
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -159,15 +159,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
 
   ## check column names
   cnames <- colnames(dt.raw)
-  # if( sum(cnames == "Ct") < 1) stop("'Cq' column is required!")
-  # if( sum(cnames == "Well") < 1) stop("'Well' column is required!")
-  # if( sum(cnames == "Gene") < 1) stop("'Gene' column is required!")
-  # if( sum(cnames == "Sample") < 1 && ! any(grepl("^ds\\.", cnames)))
-  #     stop("Sample labels column(s) not found.")
-  # if( sum(cnames == "rp.num") < 1) stop("'rp.num' column for repeat number is required!")
   tbs <- table(dt.raw$rp.num)
-  # if(min(tbs) != max(tbs)) showNotification("Repeats should be identical across all Samples!", type="error", duration=0)
-
 
 
   ## check samples and genes
@@ -176,9 +168,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
   }
   dt.raw$lb.Sample <- paste(dt.raw$Sample, dt.raw$rp.num, sep = "@")
   tbs <- table(dt.raw$lb.Sample)
-  # if(min(tbs) != max(tbs)) showNotification("All samples should have identical list of genes", type="error", duration=0)
   tbs <- table(dt.raw$Gene)
-  # if(min(tbs) != max(tbs)) showNotification("Each gene should be tested in all samples", type="error", duration=0)
 
   # handle Cq values
   xct <- dt.raw$Ct

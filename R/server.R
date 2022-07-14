@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.3
+# version: 0.1.4
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -87,7 +87,7 @@ server <- function(input, output, session) {
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
-    runningVersion <- "0.1.3"
+    runningVersion <- "0.1.4"
     url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
     latestVersion <- readLines(url)
     if (runningVersion == latestVersion) {
@@ -151,9 +151,10 @@ server <- function(input, output, session) {
   # Data Processing
   ####
 
+
   # Single Plate read file
 
-  setData <- reactive({
+  readSinglePlateData <- reactive({
     req(input$dtfile)
     f <- input$dtfile
     if (is.null(f)) {
@@ -173,12 +174,12 @@ server <- function(input, output, session) {
       n.header <- 0
     }
 
-    xx <- fread(filex, header = TRUE, stringsAsFactor = FALSE, sep = sep, skip = n.header)
+    SP_data <- fread(filex, header = TRUE, stringsAsFactor = FALSE, sep = sep, skip = n.header)
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
     ## extend lists with column names from different qPCR machines in future versions of qRAT
 
-    xx <- xx %>%
+    SP_data <- SP_data %>%
       rename_with(tolower) %>%
       rename(
         Sample = any_of(c("sample", "sample name", "name")),
@@ -189,38 +190,66 @@ server <- function(input, output, session) {
 
 
     ## generate replicate number for dataview
-    xx$TempRepNum <- paste(xx$Sample, xx$Gene)
-    xx$rp.num <- ave(xx$Sample, xx$TempRepNum, FUN = seq_along)
-    xx <- subset(xx, select = c(Well, Sample, Gene, Ct, rp.num)) %>%
+    SP_data$TempRepNum <- paste(SP_data$Sample, SP_data$Gene)
+    SP_data$rp.num <- ave(SP_data$Sample, SP_data$TempRepNum, FUN = seq_along)
+    SP_data <- subset(SP_data, select = c(Well, Sample, Gene, Ct, rp.num)) %>%
       filter(Well != "")
 
     ## replace "," with "." for dataview
-    CorrectCt <- xx$Ct
+    CorrectCt <- SP_data$Ct
     CorrectCt <- gsub(",", ".", CorrectCt, ignore.case = TRUE)
-    xx$Ct <- as.numeric(CorrectCt)
+    SP_data$Ct <- as.numeric(CorrectCt)
+
+    SP_data
+
+    # Update Inputfield for NTC Selection with all Samplenames
+    NTCs <- unique(as.character(SP_data$Sample))
+    updateVirtualSelect("NTC_Input", choices = NTCs)
+
+    # raw data for plots (spatial plate view; cq distribution)
+    plateView <- SP_data %>%
+      separate(Well,
+               into = c("text", "num"),
+               sep = "(?<=[A-Za-z])(?=[0-9])"
+      )
+
+    return(list(data = SP_data, PV = plateView))
+  })
 
 
-    ## remove (set to NA) replicates based on threshold (bad reps and max ct) and empty rows (no name, no gene)
+
+  # Single Plate Data Manipulations (filtering, quality, preparations for subsequent calculations)
+
+  setData <- reactive({
+    req(input$dtfile)
+    info <- readSinglePlateData()
+    xx <- info$data
+    if (is.null(xx)) {
+      return(NULL)
+    }
+
+    sep <- "\t"
+    if (input$Sep == "comma") sep <- ","
+    if (input$Sep == "semicolon") sep <- ";"
+
+    experimental_controls <- input$NTC_Input
+
+    # remove (set to NA) replicates based on threshold (bad reps and max ct) and empty rows (no name, no gene)
     correctRep <- xx %>%
       group_by(Sample, Gene) %>%
+      mutate(Cq_backup = Ct) %>%
       mutate(Ct = remove_replicates(Ct)) %>%
       mutate(Ct = remove_maxCt(Ct)) %>%
       filter(Sample != "") %>%
+      filter(!Sample %in% experimental_controls) %>%
       filter(Gene != "") %>%
       ungroup()
 
     badRep <- correctRep %>%
       filter(is.na(Ct)) %>%
-      select(Well, Sample, Gene, rp.num)
-
-    origData <- xx
-
-    # for spatial plate view
-    plateView <- xx %>%
-      separate(Well,
-        into = c("text", "num"),
-        sep = "(?<=[A-Za-z])(?=[0-9])"
-      )
+      select(Well, Sample, Gene, rp.num, Cq_backup) %>%
+      rename(ReplicateNumber = rp.num) %>%
+      rename(Cq = Cq_backup)
 
     xx <- correctRep
 
@@ -234,9 +263,9 @@ server <- function(input, output, session) {
     } else {
       refs <- Genes[refs]
     }
-    print(Genes)
+
     # Update Inputfield for Gene Input
-    updateSelectInput(session, "Refs", choices = Genes, selected = refs)
+    updateVirtualSelect("Refs", choices = Genes, selected = refs)
 
     ## read to qPCR format single plate
     htset <- NULL
@@ -249,8 +278,8 @@ server <- function(input, output, session) {
 
       # Update Inputfields (Plot Settings and Input Settings)
 
-      updateSelectInput(session, "Mock", choices = Samples, selected = Samples[1])
-      updateSelectInput(session, "Comps", choices = Samples, selected = Samples) # update input statistics
+      updateVirtualSelect("Mock", choices = Samples, selected = Samples[1])
+      updateVirtualSelect("Comps", choices = Samples, selected = Samples) # update input statistics
 
       if (length(Samples) > 4 | max(nchar(Samples)) > 6) {
         updateSliderInput(session, "side1", value = 8)
@@ -258,8 +287,9 @@ server <- function(input, output, session) {
       }
     }
 
-    return(list(data = xx, data.ht = htset, data.ddct = ddset, badReplicates = badRep, originalData = origData, PV = plateView, CompSamples = Samples))
+    return(list(data = xx, data.ht = htset, data.ddct = ddset, badReplicates = badRep, CompSamples = Samples))
   })
+
 
 
   # remove samples based on max Ct value, single plates
@@ -307,9 +337,10 @@ server <- function(input, output, session) {
   }
 
 
-  # Multiple Plate read files
 
-  multiData <- reactive({
+  # read Multiple Plate Data
+
+  readMPData <- reactive({
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
@@ -336,9 +367,6 @@ server <- function(input, output, session) {
       }
       filelist[[i]] <- fread(file, header = TRUE, stringsAsFactor = FALSE, sep = sep, skip = n.header)
     }
-
-
-    # multiplePlates <- rbindlist(lapply(f, fread, skip=n.header, sep=sep), use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
 
     multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
 
@@ -370,45 +398,70 @@ server <- function(input, output, session) {
 
     # Get Plate Number to Input Selection for Spatial Plate View
     ChosenPlate <- unique(as.character(multiplePlates$PlateNumber))
-    updateSelectInput(session, "PlateSelect", choices = ChosenPlate, selected = ChosenPlate[1])
+    updateVirtualSelect("PlateSelect", choices = ChosenPlate, selected = ChosenPlate[1])
 
-    # prepare data for spatial plate view
+    # raw data for plots (MP spatial plate view; MP cq distribution)
     MultiplePlatesView <- multiplePlates %>%
       separate(Well,
-        into = c("text", "num"),
-        sep = "(?<=[A-Za-z])(?=[0-9])"
+               into = c("text", "num"),
+               sep = "(?<=[A-Za-z])(?=[0-9])"
       )
+
+    # Update Inputfield for MP_NTC Selection with all sample names
+    MP_NTCs <- unique(as.character(multiplePlates$Sample))
+    updateVirtualSelect("NTC_Input_MP", choices = MP_NTCs)
+
+    multiplePlates
+
+    return(list(data = multiplePlates, MPV = MultiplePlatesView))
+  })
+
+  # Multiple Plate read files
+
+  multiData <- reactive({
+
+    req(input$plates)
+    info <- readMPData()
+    multiplePlates <- info$data
+    if (is.null(multiplePlates)) {
+      return(NULL)
+    }
+
+    if (input$SepM == "tab") sep <- "\t"
+    if (input$SepM == "comma") sep <- ","
+    if (input$SepM == "semicolon") sep <- ";"
+
+    experimental_controls <- input$NTC_Input_MP
 
     ## remove (set to NA) replicates based on threshold (bad reps and max ct) and empty rows (no name, no gene)
     correctRep <- multiplePlates %>%
       group_by(PlateNumber, Sample, Gene) %>%
+      mutate(Cq_backup = Ct) %>%
       mutate(Ct = remove_replicatesMP(Ct)) %>%
       mutate(Ct = remove_maxCtMulti(Ct)) %>%
       filter(Sample != "") %>%
+      filter(!Sample %in% experimental_controls) %>%
       filter(Gene != "") %>%
       ungroup()
 
     badRep <- correctRep %>%
       filter(is.na(Ct)) %>%
-      select(PlateNumber, Well, Sample, Gene, rp.num)
-
-    origData <- multiplePlates
+      select(PlateNumber, Well, Sample, Gene, rp.num, Cq_backup) %>%
+      rename(ReplicateNumber = rp.num) %>%
+      rename(Cq = Cq_backup)
 
     multiplePlates <- correctRep
-
-
 
     ## read Samples for IPC extraction
     multiplePlatesCOPY <- multiplePlates
     SamplesWithIPCs <- unique(as.character(multiplePlatesCOPY$Sample))
-    updateSelectInput(session, "IPC", choices = SamplesWithIPCs, selected = SamplesWithIPCs[0])
-
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = SamplesWithIPCs[0])
 
 
     write.table(multiplePlates, file = "fileMulti.csv", sep = sep)
 
 
-    return(list(data = multiplePlates, originalData = origData, badReplicates = badRep, MPV = MultiplePlatesView))
+    return(list(data = multiplePlates, badReplicates = badRep))
   })
 
 
@@ -453,7 +506,7 @@ server <- function(input, output, session) {
     } else {
       refs <- Genes[refs]
     }
-    updateSelectInput(session, "RefsM", choices = Genes, selected = refs)
+    updateVirtualSelect("RefsM", choices = Genes, selected = refs)
 
 
 
@@ -468,8 +521,8 @@ server <- function(input, output, session) {
 
       # Update Inputfields (Sample Selection)
 
-      updateSelectInput(session, "MockM", choices = Samples, selected = Samples[1])
-      updateSelectInput(session, "CompsM", choices = Samples, selected = Samples) # update input statistics
+      updateVirtualSelect("MockM", choices = Samples, selected = Samples[1])
+      updateVirtualSelect("CompsM", choices = Samples, selected = Samples) # update input statistics
 
       if (length(Samples) > 4 | max(nchar(Samples)) > 6) {
         updateSliderInput(session, "side1", value = 8)
@@ -651,8 +704,8 @@ server <- function(input, output, session) {
     SamplesddCt <- unique(as.character(expr.rel$Sample))
 
     # Update Inputfields (Plot Settings and Input Settings)
-    updateSelectInput(session, "SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
-    updateSelectInput(session, "SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
+    updateVirtualSelect("SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
+    updateVirtualSelect("SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
 
     #prepare ddCt output for statistical analysis
     ddCt_stat <- expr.rel %>% select(Sample, Gene, ddCt)
@@ -722,8 +775,8 @@ server <- function(input, output, session) {
     SamplesddCtMulti <- unique(as.character(expr.rel$Sample))
 
     # Update Inputfields (Plot Settings and Input Settings)
-    updateSelectInput(session, "SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
-    updateSelectInput(session, "SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
+    updateVirtualSelect("SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
+    updateVirtualSelect("SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
 
     ## updateRadioButtons(session, 'geneNameRel', choices=targets, selected=targets[1])
     ## updateCheckboxGroupInput(session, 'geneNameAbs', choices=targets, selected=targets)
@@ -835,7 +888,7 @@ server <- function(input, output, session) {
       noncalibrated <- info2$SamplesNoIPCs %>% unite("Sample_Gene", Sample:Gene, remove = FALSE)
 
       SamplesIPCcomparison <- unique(calibrated$Sample_Gene)
-      updateSelectInput(session, "SamplePickerIPCcomparison", choices = SamplesIPCcomparison, selected = "")
+      updateVirtualSelect("SamplePickerIPCcomparison", choices = SamplesIPCcomparison, selected = "")
 
       return(list(calibrated = calibrated, noncalibrated = noncalibrated))
 
@@ -902,19 +955,19 @@ server <- function(input, output, session) {
 
 
   output$dataSinglePlate <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
-    info <- setData()
+    info <- readSinglePlateData()
 
     if (is.null(info)) {
       NULL
     } else {
-      setData()$originalData
+      readSinglePlateData()$data
     }
   })
 
   ## Raw Data Table Plate Plot Spatial Original Data
 
   output$plotCtCard <- renderPlotly({
-    info <- setData()
+    info <- readSinglePlateData()
     hovertext <- info$PV
 
     if (is.null(info)) {
@@ -941,7 +994,7 @@ server <- function(input, output, session) {
   ## Raw Data Table Cq distribution Original Data
 
   output$plotCtDistrib <- renderPlotly({
-    info <- setData()
+    info <- readSinglePlateData()
 
     if (is.null(info)) NULL
 
@@ -1001,7 +1054,7 @@ server <- function(input, output, session) {
         font=t,
         yaxis = list(title = "Count", showgrid = FALSE, showline = TRUE, zeroline = FALSE, ticks = "outside", linewidth = 2),
         barmode = "stack",
-        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside")
+        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside", tickvals = ~Sample, ticktext = ~Sample)
       ) %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1087,6 +1140,7 @@ server <- function(input, output, session) {
     }
 
     df <- info$absolute %>%
+      mutate(Sample = as.character(Sample)) %>%
       filter(Sample %in% input$SamplePicker)
 
 
@@ -1167,7 +1221,9 @@ server <- function(input, output, session) {
     PlotScale <- input$scale_ddCq
 
     SamplePicker <- input$SamplePickerDDCt
-    df <- info$relative %>% filter(Sample %in% c(SamplePicker))
+    df <- info$relative %>%
+        mutate(Sample = as.character(Sample)) %>%
+        filter(Sample %in% c(SamplePicker))
 
     # get the correct data for plot depending on user input (FC or ddCT values)
     if (PlotDataPick == "Fold Change") {
@@ -1238,15 +1294,15 @@ server <- function(input, output, session) {
   ## Raw Data Table Multiple Plates
 
   output$multiplePlatesData <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
-    info <- multiData()
-    if (is.null(info)) NULL else info$originalData %>% rename(Plate = PlateNumber)
+    info <- readMPData()
+    if (is.null(info)) NULL else info$data %>% rename(Plate = PlateNumber)
   })
 
 
   ## Raw Data Table Plate Plot Spatial Original Data Multiple Plates
 
   output$MultiplotCtCard <- renderPlotly({
-    info <- multiData()
+    info <- readMPData()
     if (is.null(info)) {
       NULL
     } else {
@@ -1337,7 +1393,7 @@ server <- function(input, output, session) {
         font=t,
         yaxis = list(title = "Count", showgrid = FALSE, showline = TRUE, zeroline = FALSE, ticks = "outside"),
         barmode = "stack",
-        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside")
+        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside", tickvals = ~Sample, ticktext = ~Sample)
       ) %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
@@ -1518,7 +1574,9 @@ server <- function(input, output, session) {
     #
 
 
-    df <- info$multiAbsolute %>% filter(Sample %in% c(SamplePicker))
+    df <- info$multiAbsolute %>%
+      mutate(Sample = as.character(Sample)) %>%
+      filter(Sample %in% c(SamplePicker))
 
 
     if (PlotType == "Bar Chart") {
@@ -1610,7 +1668,9 @@ server <- function(input, output, session) {
     }
     #
 
-    df <- info$multiRelative %>% filter(Sample %in% c(SamplePicker))
+    df <- info$multiRelative %>%
+      mutate(Sample = as.character(Sample)) %>%
+      filter(Sample %in% c(SamplePicker))
 
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
@@ -1839,12 +1899,14 @@ server <- function(input, output, session) {
     if (n > 0) {
       isolate({
         lapply(seq_len(n), function(i) {
-          selectizeInput(
+          virtualSelectInput(
             inputId = paste0("CompsMultiple", i),
             label = paste0("Comparison ", i),
             choices = info$CompSamples,
             multiple = TRUE,
-            options = list(maxItems = 2),
+            maxValues = 2,
+            disableAllOptionsSelectedText = TRUE,
+            showValueAsTags = TRUE,
             selected = AllInputs()[[paste0("CompsMultiple", i)]]
           )
         })
@@ -1897,12 +1959,14 @@ server <- function(input, output, session) {
     if (n > 0) {
       isolate({
         lapply(seq_len(n), function(i) {
-          selectizeInput(
+          virtualSelectInput(
             inputId = paste0("CompsMultipleM", i),
             label = paste0("Comparison ", i),
             choices = info$CompSamples,
             multiple = TRUE,
-            options = list(maxItems = 2),
+            maxValues = 2,
+            disableAllOptionsSelectedText = TRUE,
+            showValueAsTags = TRUE,
             selected = AllInputs()[[paste0("CompsMultipleM", i)]]
           )
         })
@@ -1936,6 +2000,6 @@ server <- function(input, output, session) {
 
   ## running version Information of qRAT for output
   output$runningVersion <- renderText({
-    runningVersion <- "0.1.3"
+    runningVersion <- "0.1.4"
   })
 }
