@@ -40,5 +40,7 @@ qRAT is available as web application on https://qrat.shinyapps.io/qrat/
 
 If you use qRAT for any published research, please include the following citation:
 
+Flatschacher, D., Speckbacher, V. & Zeilinger, S. qRAT: an R-based stand-alone application for relative expression analysis of RT-qPCR data. BMC Bioinformatics 23, 286 (2022). https://doi.org/10.1186/s12859-022-04823-7
+
 ## Getting Help
 [qRAT Homepage](https://www.uibk.ac.at/microbiology/services/qrat/)
