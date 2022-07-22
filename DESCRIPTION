@@ -1,37 +1,35 @@
 Package: qRAT
 Title: qPCR relative expression analysis tool
-Version: 0.1.4
+Version: 0.1.5
 Authors@R: 
     person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8221-9695"))
 Description: qRAT is a tool for the relative quantification of real-time quantitative PCR data analysis
-License: `use_mit_license()`
+License: MIT
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.0
 Imports: 
     shiny,
     bslib,
-    data.table,
-    ddCt,
-    dplyr,
-    DT,
-    ggplot2,
-    ggpubr,
-    HTqPCR,
-    magrittr,
-    pkgload,
-    plotly,
-    scales,
-    shinycssloaders,
-    shinyjs,
     shinyWidgets,
-    stringr,
-    thematic,
-    tidyr,
-    waiter,
-    xtable
-Suggests:
-    BiocManager,
     HTqPCR,
-    ddCt
+    ddCt,
+    plotly,
+    shinyjs,
+    ggplot2,
+    scales,
+    xtable,
+    data.table,
+    DT,
+    dplyr,
+    waiter,
+    tidyr,
+    stringr,
+    magrittr,
+    shinycssloaders,
+    ggpubr,
+    curl,
+    pkgload
+Suggests:
+    BiocManager

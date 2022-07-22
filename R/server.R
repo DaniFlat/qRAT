@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.4
+# version: 0.1.5
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -41,19 +41,18 @@ library("ddCt")
 library("plotly")
 library("shinyjs")
 library("ggplot2")
-#library("reshape2")
 library("scales")
 library("xtable")
 library("data.table")
 library("DT")
 library("dplyr")
 library("waiter")
-library("thematic")
 library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
 library("ggpubr")
+library("curl")
 
 server <- function(input, output, session) {
 
@@ -70,54 +69,61 @@ server <- function(input, output, session) {
 
   waiter_hide()
 
-  thematic_on(
-    bg = "auto",
-    fg = "auto",
-    accent = "auto",
-    font = "Helvetica",
-    sequential = sequential_gradient(),
-    qualitative = okabe_ito(),
-    inherit = FALSE
-  )
-
-
-
   # loader for plots and tables
   w <- Waiter$new(id = c("dataSinglePlate", "ddctAbsGraph"), html = spin_loader(), color = transparent(.5))
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
-    runningVersion <- "0.1.4"
+    if (!has_internet()) {
+
+
+      show_alert(
+        title = "Error",
+        text = "No internet connection available, please try again later.",
+        type = "warning",
+        showCloseButton = TRUE
+      )
+
+      return(NULL)
+
+    }
+
+    else {
+    runningVersion <- "0.1.5"
     url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
-    latestVersion <- readLines(url)
+    latestVersion <- readLines(url, n=1)
     if (runningVersion == latestVersion) {
       show_alert(
         title = "Alright,",
         text = "you're running the latest version!",
-        type = "success"
+        type = "success",
+        showCloseButton = TRUE
       )
     } else {
       show_alert(
         title = "Update!",
-        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://www.uibk.ac.at/microbiology/services/qrat/", "Download here!")),
+        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here!")),
         html = TRUE,
-        type = "warning"
+        type = "warning",
+        showCloseButton = TRUE
       )
+    }
     }
   })
 
-  # Button readPublication
-  observeEvent(input$readPublication, {
+  # Button Citation
+  observeEvent(input$Citation, {
     show_alert(
-      title = NULL,
-      text = tags$span(
-        tags$h3("Publication",
-          style = "color: steelblue;"
-        ),
-        tags$br(),
-        tags$a(href = "#", "Link")
+      title = "Citation",
+      text = tags$span("If you use qRAT in published research, please cite the following paper:", tags$br(),
+                       tags$a(href = "https://doi.org/10.1186/s12859-022-04823-7", "qRAT"), tags$br(),
+                       "If you use ddCq values, please also cite the paper for:", tags$br(),
+                       tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.ddCt", "ddCt"), tags$br(),
+                       "If you use the statistical analysis, please also cite the paper for:", tags$br(),
+                       tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.limma", "limma"), tags$br()
       ),
-      html = TRUE
+      html = TRUE,
+      showCloseButton = TRUE
     )
   })
 
@@ -151,10 +157,22 @@ server <- function(input, output, session) {
   # Data Processing
   ####
 
+  #vectors containing typical column names from different qPCR machines; for user-friendly upload of the input data file
+  #extend these lists in future versions of qRAT
+  sampleColumnList <- c("sample", "sample name", "name")
+  wellColumnList <- c("well")
+  geneColumnList <- c("gene", "target", "target name", "detector", "primer/probe")
+  cqColumnList <- c("ct", "cq")
 
   # Single Plate read file
 
   readSinglePlateData <- reactive({
+
+    if (input$Sep == "tab") sep <- "\t"
+    if (input$Sep == "comma") sep <- ","
+    if (input$Sep == "semicolon") sep <- ";"
+    if (input$Sep == "auto") sep <- "auto"
+
     req(input$dtfile)
     f <- input$dtfile
     if (is.null(f)) {
@@ -162,9 +180,6 @@ server <- function(input, output, session) {
     } else {
       filex <- f$datapath
     }
-    sep <- "\t"
-    if (input$Sep == "comma") sep <- ","
-    if (input$Sep == "semicolon") sep <- ";"
 
 
     # Scan through beginning of file, max 100 lines and look for row with "Well"
@@ -174,18 +189,30 @@ server <- function(input, output, session) {
       n.header <- 0
     }
 
-    SP_data <- fread(filex, header = TRUE, stringsAsFactor = FALSE, sep = sep, skip = n.header)
+    SP_data <- fread(filex, header = TRUE, sep = sep, skip = n.header)
+
+
+    ##Validate Input Data File
+    #change all column names to lowercase for easy comparison with prepared column-name-lists
+    SP_data <- SP_data %>%
+      rename_with(tolower)
+
+    column_names <- colnames(SP_data)
+
+    if (length(intersect(sampleColumnList,column_names)) < 1) showNotification("Sample Column is missing", type = "error", duration = 10)
+    if (length(intersect(wellColumnList,column_names)) < 1) showNotification("Well Column is missing", type = "error", duration = 10)
+    if (length(intersect(geneColumnList,column_names)) < 1) showNotification("Gene Column is missing", type = "error", duration = 10)
+    if (length(intersect(cqColumnList,column_names)) < 1) showNotification("Cq Column is missing", type = "error", duration = 10)
+
+
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
-    ## extend lists with column names from different qPCR machines in future versions of qRAT
-
     SP_data <- SP_data %>%
-      rename_with(tolower) %>%
       rename(
-        Sample = any_of(c("sample", "sample name", "name")),
-        Well = any_of(c("well")),
-        Gene = any_of(c("gene", "target", "target name", "detector", "primer/probe")),
-        Ct = any_of(c("ct", "cq"))
+        Sample = any_of(sampleColumnList),
+        Well = any_of(wellColumnList),
+        Gene = any_of(geneColumnList),
+        Ct = any_of(cqColumnList)
       )
 
 
@@ -200,8 +227,6 @@ server <- function(input, output, session) {
     CorrectCt <- gsub(",", ".", CorrectCt, ignore.case = TRUE)
     SP_data$Ct <- as.numeric(CorrectCt)
 
-    SP_data
-
     # Update Inputfield for NTC Selection with all Samplenames
     NTCs <- unique(as.character(SP_data$Sample))
     updateVirtualSelect("NTC_Input", choices = NTCs)
@@ -212,6 +237,8 @@ server <- function(input, output, session) {
                into = c("text", "num"),
                sep = "(?<=[A-Za-z])(?=[0-9])"
       )
+
+    SP_data
 
     return(list(data = SP_data, PV = plateView))
   })
@@ -228,9 +255,10 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    sep <- "\t"
+    if (input$Sep == "tab") sep <- "\t"
     if (input$Sep == "comma") sep <- ","
     if (input$Sep == "semicolon") sep <- ";"
+    if (input$Sep == "auto") sep <- "\t"
 
     experimental_controls <- input$NTC_Input
 
@@ -247,14 +275,12 @@ server <- function(input, output, session) {
 
     badRep <- correctRep %>%
       filter(is.na(Ct)) %>%
-      select(Well, Sample, Gene, rp.num, Cq_backup) %>%
-      rename(ReplicateNumber = rp.num) %>%
       rename(Cq = Cq_backup)
 
     xx <- correctRep
 
 
-    write.table(xx, file = "fileSingle.csv", sep = sep)
+    fwrite(xx, file = "fileSingle.csv", sep = sep)
 
     Genes <- unique(xx$Gene)
     refs <- grep("^(ACT|UBQ|REF|RF).*", Genes, ignore.case = TRUE)
@@ -344,6 +370,7 @@ server <- function(input, output, session) {
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
+    if (input$SepM == "auto") sep <- "auto"
 
     req(input$plates)
 
@@ -365,21 +392,32 @@ server <- function(input, output, session) {
       if (length(n.header) == 0) {
         n.header <- 0
       }
-      filelist[[i]] <- fread(file, header = TRUE, stringsAsFactor = FALSE, sep = sep, skip = n.header)
+      filelist[[i]] <- fread(file, header = TRUE, sep = sep, skip = n.header)
     }
 
     multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
 
 
-    ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
-    ## extend lists with column names from different qPCR machines
+
+    ##Validate Input Data File
+    #change all column names to lowercase for easy comparison with prepared column-name-lists
     multiplePlates <- multiplePlates %>%
-      rename_with(tolower) %>%
+      rename_with(tolower)
+
+    column_names <- colnames(multiplePlates)
+
+    if (length(intersect(sampleColumnList,column_names)) < 1) showNotification("Sample Column is missing", type = "error", duration = 10)
+    if (length(intersect(wellColumnList,column_names)) < 1) showNotification("Well Column is missing", type = "error", duration = 10)
+    if (length(intersect(geneColumnList,column_names)) < 1) showNotification("Gene Column is missing", type = "error", duration = 10)
+    if (length(intersect(cqColumnList,column_names)) < 1) showNotification("Cq Column is missing", type = "error", duration = 10)
+
+    ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
+    multiplePlates <- multiplePlates %>%
       rename(
-        Sample = any_of(c("sample", "sample name", "name")),
-        Well = any_of(c("well")),
-        Gene = any_of(c("gene", "target", "target name", "detector", "primer/probe")),
-        Ct = any_of(c("ct", "cq")),
+        Sample = any_of(sampleColumnList),
+        Well = any_of(wellColumnList),
+        Gene = any_of(geneColumnList),
+        Ct = any_of(cqColumnList),
         PlateNumber = platenumber
       )
 
@@ -430,6 +468,7 @@ server <- function(input, output, session) {
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
+    if (input$SepM == "auto") sep <- "\t"
 
     experimental_controls <- input$NTC_Input_MP
 
@@ -446,8 +485,6 @@ server <- function(input, output, session) {
 
     badRep <- correctRep %>%
       filter(is.na(Ct)) %>%
-      select(PlateNumber, Well, Sample, Gene, rp.num, Cq_backup) %>%
-      rename(ReplicateNumber = rp.num) %>%
       rename(Cq = Cq_backup)
 
     multiplePlates <- correctRep
@@ -458,7 +495,7 @@ server <- function(input, output, session) {
     updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = SamplesWithIPCs[0])
 
 
-    write.table(multiplePlates, file = "fileMulti.csv", sep = sep)
+    fwrite(multiplePlates, file = "fileMulti.csv", sep = sep)
 
 
     return(list(data = multiplePlates, badReplicates = badRep))
@@ -474,6 +511,7 @@ server <- function(input, output, session) {
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
+    if (input$SepM == "auto") sep <- "\t"
 
     info <- multiData()
     if (is.null(info)) {
@@ -490,11 +528,11 @@ server <- function(input, output, session) {
       # remove IPCs from Samples, as they interfere with expression calculations
       info2 <- info2[!(info2$Sample == ipcs), ]
 
-      write.table(info2, file = "fileMultiNoIPCs.csv", sep = sep)
+      fwrite(info2, file = "fileMultiNoIPCs.csv", sep = sep)
     } else {
 
       # don't try to remove IPCs from samples
-      write.table(info2, file = "fileMultiNoIPCs.csv", sep = sep)
+      fwrite(info2, file = "fileMultiNoIPCs.csv", sep = sep)
     }
 
 
@@ -712,7 +750,7 @@ server <- function(input, output, session) {
     ddCt_stat <- rename(ddCt_stat, Ct = ddCt)
 
 
-    write.table(ddCt_stat, file = "ddCtsingle.csv")
+    fwrite(ddCt_stat, file = "ddCtsingle.csv")
 
     ## read to qPCR format
     ddCt_stat_set <- NULL
@@ -822,9 +860,10 @@ server <- function(input, output, session) {
       if (input$SepM == "tab") sep <- "\t"
       if (input$SepM == "comma") sep <- ","
       if (input$SepM == "semicolon") sep <- ";"
+      if (input$SepM == "auto") sep <- "\t"
 
       extractedIPCs <- na.omit(extractedIPCs)
-      write.table(extractedIPCs, file = "IPCs.csv", sep = sep)
+      fwrite(extractedIPCs, file = "IPCs.csv", sep = sep)
 
       gm_mean <- function(x, na.rm = TRUE) {
         exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x))
@@ -935,7 +974,6 @@ server <- function(input, output, session) {
       editable = FALSE,
       scroller = TRUE,
       autoWidth = TRUE,
-      responsive = FALSE,
       processing = FALSE,
       lengthChange = FALSE,
       initComplete = JS(
@@ -954,14 +992,10 @@ server <- function(input, output, session) {
   ## Raw Data Table Single Plate Original Data
 
 
-  output$dataSinglePlate <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataSinglePlate <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- readSinglePlateData()
+    if (is.null(info)) NULL else info$data  %>% rename(Replicate = rp.num)
 
-    if (is.null(info)) {
-      NULL
-    } else {
-      readSinglePlateData()$data
-    }
   })
 
   ## Raw Data Table Plate Plot Spatial Original Data
@@ -1023,9 +1057,12 @@ server <- function(input, output, session) {
 
   ## Single Plate Show bad replicates Table
 
-  output$dataSinglePlateBadRep <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataSinglePlateBadRep <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- setData()
-    if (is.null(info)) NULL else setData()$badReplicates
+    data <- info$badReplicates %>%
+      select(Well, Sample, Gene, rp.num, Cq) %>%
+      rename(Replicate = rp.num)
+    if (is.null(info)) NULL else data
   })
 
 
@@ -1092,7 +1129,7 @@ server <- function(input, output, session) {
 
   ## dCt Expression Data Table Single Plate
 
-  output$ddctAbsolute <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctAbsolute <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdct()
     if (is.null(info)) {
       return(NULL)
@@ -1163,7 +1200,8 @@ server <- function(input, output, session) {
                                                     ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
-          aes(fill = Gene),
+          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
+                            "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_brewer(palette = colorPick)+
@@ -1171,12 +1209,13 @@ server <- function(input, output, session) {
         list(ggplottheme)
 
 
+
       if (scalePick == "normal") {
-        fig <- ggplotly(figNormal)
+        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
       } else {
         fig <- figNormal +
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig)
+        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
       }
 
     }
@@ -1194,7 +1233,7 @@ server <- function(input, output, session) {
 
   ## ddCt Expression Data Table Single Plate
 
-  output$ddctRelative <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctRelative <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdct()
     if (is.null(info)) {
       return(NULL)
@@ -1257,7 +1296,8 @@ server <- function(input, output, session) {
                                                     ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
-          aes(fill = Gene),
+          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
+                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_brewer(palette = colorPick)+
@@ -1266,11 +1306,11 @@ server <- function(input, output, session) {
 
 
       if (scalePick == "normal") {
-        fig <- ggplotly(figNormal)
+        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
       } else {
         fig <- figNormal +
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig)
+        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
       }
 
     }
@@ -1293,9 +1333,9 @@ server <- function(input, output, session) {
 
   ## Raw Data Table Multiple Plates
 
-  output$multiplePlatesData <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$multiplePlatesData <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- readMPData()
-    if (is.null(info)) NULL else info$data %>% rename(Plate = PlateNumber)
+    if (is.null(info)) NULL else info$data %>% rename(Plate = PlateNumber, Replicate = rp.num)
   })
 
 
@@ -1361,9 +1401,12 @@ server <- function(input, output, session) {
 
   ## Data Table Multiple Plates Show bad replicates
 
-  output$dataMultiplePlatesBadRep <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$dataMultiplePlatesBadRep <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
-    if (is.null(info)) NULL else multiData()$badReplicates %>% rename(Plate = PlateNumber)
+    data <- info$badReplicates %>%
+      select(PlateNumber, Well, Sample, Gene, rp.num, Cq) %>%
+      rename(Plate = PlateNumber, Replicate = rp.num)
+    if (is.null(info)) NULL else data
   })
 
 
@@ -1431,10 +1474,12 @@ server <- function(input, output, session) {
 
   ## Extracted IPCs Multiple Plates
 
-  output$extractedIPCsTable <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$extractedIPCsTable <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     if (input$Id027 == TRUE) {
       info <- extractIPCs()
-      if (is.null(info)) NULL else select(extractIPCs()$extrIPCs, -TempRepNum) # remove TempRepNum for displaying the table because this was just an internal variable
+      data <- info$extrIPCs %>% select(PlateNumber, Well, Sample, Gene, Ct, rp.num) %>%
+        rename(Plate = PlateNumber, Cq = Ct, Replicate = rp.num)
+      if (is.null(info)) NULL else data
     } else {}
   })
 
@@ -1442,19 +1487,24 @@ server <- function(input, output, session) {
 
   ## Calibration Factors Table
 
-  output$tableCalibrationFactors <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, {
+  output$tableCalibrationFactors <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, {
     if (input$Id027 == TRUE) {
-      data <- extractIPCs()
-      if (is.null(data)) NULL else data$CalibrationFactors %>% mutate(across(where(is.numeric), round, 4))
+      info <- extractIPCs()
+      data <- info$CalibrationFactors %>% mutate(across(where(is.numeric), round, 4))
+      if (is.null(info)) NULL else data
     } else {}
   })
 
   ## Inter-Plate Ct values, calibrated with calibration factor
 
-  output$interPlateCalibration <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$interPlateCalibration <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     if (input$Id027 == TRUE) {
-      data <- interPlateCalibration()
-      if (is.null(data)) NULL else data %>% mutate(across(where(is.numeric), round, 2))
+      info <- interPlateCalibration()
+      data <- info %>%
+        select(PlateNumber, Well, Sample, Gene, Ct, rp.num) %>%
+        mutate(across(where(is.numeric), round, 2)) %>%
+        rename(Plate = PlateNumber, Cq = Ct, Replicate = rp.num)
+      if (is.null(info)) NULL else data
     } else {}
   })
 
@@ -1525,7 +1575,7 @@ server <- function(input, output, session) {
 
   ## dCt Gene Expression Table Multiple Plates
 
-  output$ddctAbsoluteMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctAbsoluteMulti <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdctMulti()
     if (is.null(info)) {
       return(NULL)
@@ -1598,7 +1648,8 @@ server <- function(input, output, session) {
                                                     ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
-          aes(fill = Gene),
+          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
+                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_brewer(palette = colorPick)+
@@ -1607,11 +1658,11 @@ server <- function(input, output, session) {
 
 
       if (scalePick == "normal") {
-        fig <- ggplotly(figNormal)
+        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
       } else {
         fig <- figNormal +
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig)
+        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
       }
 
     }
@@ -1629,7 +1680,7 @@ server <- function(input, output, session) {
 
   ## ddCq Gene Expression Table Multiple Plates
 
-  output$ddctRelativeMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$ddctRelativeMulti <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- resultDdctMulti()
     if (is.null(info)) {
       return(NULL)
@@ -1691,7 +1742,8 @@ server <- function(input, output, session) {
                                                     ymin = get(PlotDataPick) - get(PlotDataError),
                                                     ymax = get(PlotDataPick) + get(PlotDataError)))+
         geom_point(
-          aes(fill = Gene),
+          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
+                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_brewer(palette = colorPick)+
@@ -1700,11 +1752,11 @@ server <- function(input, output, session) {
 
 
       if (scalePick == "normal") {
-        fig <- ggplotly(figNormal)
+        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
       } else {
         fig <- figNormal +
           scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig)
+        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
       }
 
     }
@@ -1738,7 +1790,7 @@ server <- function(input, output, session) {
         filter(n < 2)
     }
 
-    output$countTable <- renderTable(countReplicates)
+    output$countTable <- renderDT(countReplicates)
 
     if (dim(countReplicates)[1] == 0) {
       tagList(
@@ -1761,10 +1813,10 @@ server <- function(input, output, session) {
             class = "bs-component",
             div(
               class = "alert alert-warning",
-              div(class = "float-right", icon("times", "fa-3x")),
+              div(class = "float-right", icon("xmark", "fa-3x")),
               h4(class = "alert-heading", "Replicates")
             ),
-            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), tableOutput("countTable")))
+            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), DTOutput("countTable")))
           )
         })
       )
@@ -1785,7 +1837,7 @@ server <- function(input, output, session) {
         filter(n < 2)
     }
 
-    output$countTable <- renderTable(countReplicates)
+    output$countTable <- renderDT(countReplicates)
 
     if (dim(countReplicates)[1] == 0) {
       tagList(
@@ -1808,10 +1860,10 @@ server <- function(input, output, session) {
             class = "bs-component",
             div(
               class = "alert alert-warning",
-              div(class = "float-right", icon("times", "fa-3x")),
+              div(class = "float-right", icon("xmark", "fa-3x")),
               h4(class = "alert-heading", "Replicates")
             ),
-            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), tableOutput("countTable")))
+            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), DTOutput("countTable")))
           )
         })
       )
@@ -1822,7 +1874,7 @@ server <- function(input, output, session) {
 
   ## Limma Outputs
 
-  output$resultLimma <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$resultLimma <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimma()
     if (is.null(dt)) {
       return(NULL)
@@ -1841,7 +1893,7 @@ server <- function(input, output, session) {
       mutate(across(where(is.numeric), round, 4))
   })
 
-  output$resultLimmaMulti <- renderDT(extensions = c("Buttons", "Responsive"), options = table_options(), rownames = FALSE, filter = "top", {
+  output$resultLimmaMulti <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimmaMulti()
     if (is.null(dt)) {
       return(NULL)
@@ -1864,7 +1916,7 @@ server <- function(input, output, session) {
 
   ## conditions for conditionalpanel Single Plate & Multiple Plate Upload
   output$fileUploadedSingle <- reactive({
-    return(!is.null(setData()))
+    return(!is.null(readSinglePlateData()))
   })
   output$fileUploadedMulti <- reactive({
     return(!is.null(multiData()))
@@ -1995,11 +2047,4 @@ server <- function(input, output, session) {
     comparisonBoxesM()
   })
 
-
-
-
-  ## running version Information of qRAT for output
-  output$runningVersion <- renderText({
-    runningVersion <- "0.1.4"
-  })
 }
