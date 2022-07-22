@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.5
+# version: 0.1.4
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -41,24 +41,26 @@ library("ddCt")
 library("plotly")
 library("shinyjs")
 library("ggplot2")
+#library("reshape2")
 library("scales")
 library("xtable")
 library("data.table")
 library("DT")
 library("dplyr")
 library("waiter")
+library("thematic")
 library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
 library("ggpubr")
-library("curl")
 
 ####
 # Loading Screen
 ####
 
 options(spinner.color = "#29abe0", spinner.type = "8")
+thematic_shiny(font = "Helvetica")
 
 # color list for plots
 colorlist <- c("Paired", "Spectral", "Blues", "Greens", "Greys", "Oranges", "Purples", "Reds", "BrBG", "PiYG", "PRGn", "PuOr", "RdBu", "RdGy", "RdYlBu", "RdYlGn", "viridis")
@@ -84,7 +86,7 @@ ui <- page_navbar(
   collapsible = TRUE,
   inverse = FALSE,
   tabPanel("Start",
-    icon = icon("house"), class = "active",
+    icon = icon("home"), class = "active",
 
     # loading screen
     waiter::use_waiter(),
@@ -92,7 +94,7 @@ ui <- page_navbar(
     waiter::use_steward(colors = c("#325d88", "#2c3e50", "#325d88", "#6610f2")),
     waiter::waiter_preloader(html = tagList(waiter::spin_flower(), HTML(paste(tags$span(style = "font-size:17px;letter-spacing: 1.5px", "Loading"), tags$span(style = "font-size:17px;font-weight:600", "qRAT..."), sep = " ")))),
     tags$script(src = "www/shinyLink.js"), # shiny Link for internal linking (to tabsets)
-    tags$style(HTML(".help-block {color: #325d88 !important;}")), # color of helpText
+
 
     # Start Page HTML
     div(
@@ -131,7 +133,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "How To?"),
-            p(class = "card-text", "- Extensive documentation on data input, manipulation and analysis"),
+            p(class = "card-text", "- Extensive documentation on data input, manipulation and graphical representation"),
             p(class = "card-text", "- Checklist and most important points")
           )
         ),
@@ -149,7 +151,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "qRAT version"),
-            p(class = "card-text", "You're running: Version 0.1.5"),
+            p(class = "card-text", "You're running:", textOutput("runningVersion", inline = TRUE)),
             p(class = "card-text", "It is recommended to check for Updates before using the application")
           )
         ),
@@ -167,14 +169,14 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "Note"),
-            p(class = "card-text", "If you use qRAT in published research, please include the correct citations."),
-            p(class = "card-text", "Thanks!")
+            p(class = "card-text", "If you use qRAT in published research, please include the following citation:"),
+            p(class = "card-text", "xxxxxxxxx")
           )
         ),
         br(),
         p(
           class = "lead",
-          actionButton(class = "btn btn-info", label = "How to cite?", inputId = "Citation")
+          actionButton(class = "btn btn-info", label = "Read original publication", inputId = "readPublication")
         )
       ),
     ),
@@ -190,10 +192,9 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsSingle=='Raw Data'",
           h4("Single Plate Input"),
-          helpText("Choose the separator used in the file. If you are not sure, set it to 'auto'.", tags$br(),
-                   "See", shinyLinkInText(to = "help", label = "User Guide"), "for more details."),
+          helpText("Choose the separator used in the file. See User Guide for more details."),
           radioGroupButtons("Sep",
-            label = "Data separator", choices = c("auto", "comma", "tab", "semicolon"),
+            label = "Data separator", choices = c("comma", "tab", "semicolon"),
             checkIcon = list(
               yes = icon("ok",
                 lib = "glyphicon"
@@ -203,8 +204,7 @@ ui <- page_navbar(
               )
             )
           ),
-          helpText("Choose your file", tags$b("(csv or txt)"), tags$br(),
-                   "See", shinyLinkInText(to = "help", label = "Help"), "to download example data file."),
+          helpText("Choose your file (csv or txt). See >Help< to download example data file."),
           fileInput("dtfile", label = "Upload single plate data file here", accept = c(
             "text/csv", "text/comma-separated-values", "text/tab-separated-values",
             "text/plain", ".csv", ".txt"
@@ -228,7 +228,7 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsSingle=='Relative dCq' || input.tabsSingle=='Relative ddCq'",
           h4("Analysis Input"),
-          h5("Housekeeping Gene(s)", actionLink(icon = icon("circle-info"), label=NULL, style="color: #325d88", inputId = "housekeepingInfo")),
+          h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfo")),
           helpText("Set reference gene(s)"),
           virtualSelectInput("Refs",
             label = "Reference Genes",
@@ -320,7 +320,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedSingle",
               fluidRow(
-                column(5, h5("Data Table"), DTOutput("dataSinglePlate") %>% withSpinner()),
+                column(5, h5("Data Table"), dataTableOutput("dataSinglePlate") %>% withSpinner()), br(), br(),
                 column(6, h5(""), plotlyOutput("plotCtCard"), plotlyOutput("plotCtDistrib"))
               )
             )
@@ -332,7 +332,7 @@ ui <- page_navbar(
               fluidRow(
                 column(12,
                        fluidRow(
-                        column(12, h5("Wells to be excluded from analysis"), DTOutput("dataSinglePlateBadRep")), br(), br()
+                        column(12, h5("Wells to be excluded from analysis"), dataTableOutput("dataSinglePlateBadRep")), br(), br()
                         )),
               ),
               fluidRow(column(6, h5(""), plotlyOutput("SinglePlateFilterPlot")),
@@ -346,7 +346,7 @@ ui <- page_navbar(
               condition = "output.fileUploadedSingle",
               fluidRow(h5("dCq Graph Output"), plotlyOutput("ddctAbsGraph", width = "100%", height = "50%")), br()
             ),
-            h5("dCq Table Output"), fluidRow(DTOutput("ddctAbsolute")),
+            h5("dCq Table Output"), fluidRow(dataTableOutput("ddctAbsolute")),
           ),
           tabPanel(
             "Relative ddCq", h4("ddCq Analysis", align = "center"),
@@ -354,7 +354,7 @@ ui <- page_navbar(
               condition = "output.fileUploadedSingle",
               fluidRow(h5("ddCq Graph Output"), plotlyOutput("ddctRelGraph", width = "100%", height = "50%")), br()
             ),
-            h5("ddCq Table Output"), fluidRow(DTOutput("ddctRelative")),
+            h5("ddCq Table Output"), fluidRow(dataTableOutput("ddctRelative")),
           ),
           #    tabPanel(
           #      "MIQE Check", h4("MIQE Guidline Check", align = "center"), br(), br(),
@@ -371,24 +371,23 @@ ui <- page_navbar(
           tabPanel(
             "Statistical Analysis", h4("Statistical Analysis", align = "center"), h5("Function for detecting differentially expressed genes"),
             br(),
-            DTOutput("resultLimma")
+            dataTableOutput("resultLimma")
           )
         )
       )
     )
   ),
   tabPanel("Multiple Plates",
-    icon = icon("table-cells-large"),
+    icon = icon("th-large"),
     sidebarLayout(
       sidebarPanel(
         width = 3,
         conditionalPanel(
           condition = "input.tabsMulti=='Raw Data'",
           h4("Multiple Plates Input"),
-          helpText("Choose the separator used in the file. If you are not sure, set it to 'auto'.", tags$br(),
-                   "See", shinyLinkInText(to = "help", label = "User Guide"), "for more details."),
+          helpText("Choose the separator used in the file. See User Guide for more details."),
           radioGroupButtons("SepM",
-            label = "Data separator", choices = c("auto", "comma", "tab", "semicolon"),
+            label = "Data separator", choices = c("comma", "tab", "semicolon"),
             checkIcon = list(
               yes = icon("ok",
                 lib = "glyphicon"
@@ -398,9 +397,8 @@ ui <- page_navbar(
               )
             )
           ),
-          helpText("Choose your files", tags$b("(csv or txt)"), tags$br(),
-                   "Multiple files can be selected and loaded while holding the [Ctrl] key.", tags$br(),
-                   "See", shinyLinkInText(to = "help", label = "User Guide"), "for more details."),
+          helpText("Choose your files (csv or txt). Multiple files can be selected and loaded while holding the [Ctrl] key.
+                   See >Help< to download example data files."),
           fileInput("plates", label = "Upload multiple plates data files here", accept = c(
             "text/csv", "text/comma-separated-values", "text/tab-separated-values",
             "text/plain", ".csv", ".txt"
@@ -442,7 +440,7 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsMulti=='Relative dCq' || input.tabsMulti=='Relative ddCq'",
           h4("Analysis Input"),
-          h5("Housekeeping Gene(s)", actionLink(icon = icon("circle-info"), label=NULL, style="color: #325d88", inputId = "housekeepingInfoMP")),
+          h5("Housekeeping Gene(s)", actionLink(icon = icon("info-circle"), label=NULL, style="color: #325d88", inputId = "housekeepingInfoMP")),
           helpText("Set reference gene(s)"),
           virtualSelectInput("RefsM",
             label = "Reference Genes",
@@ -532,7 +530,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(6, h5("Data Table"), DTOutput("multiplePlatesData") %>% withSpinner()),
+                column(6, h5("Data Table"), dataTableOutput("multiplePlatesData") %>% withSpinner()),
                 column(6, h5(""), align="center", plotlyOutput("MultiplotCtCard"), virtualSelectInput("PlateSelect", label = "Choose Plate", choices = "", width = "20%"), plotlyOutput("MultiplotCtDistrib"))
               )
             )
@@ -542,7 +540,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(
-                column(12, h5("Wells to be excluded from analysis"), DTOutput("dataMultiplePlatesBadRep"))), br(), br(),
+                column(12, h5("Wells to be excluded from analysis"), dataTableOutput("dataMultiplePlatesBadRep"))), br(), br(),
               fluidRow(
                 column(6, h5(""), plotlyOutput("MultiplePlatesFilterPlot")),
                 column(6, h5(""), uiOutput("MultiplePlateMIQEcheck"))), br(),
@@ -553,10 +551,12 @@ ui <- page_navbar(
             "Inter-Plate Calibration", h4("Inter-Plate Calibration", align = "center"),
             conditionalPanel(
               condition = "output.fileUploadedMulti",
-              fluidRow(column(12, h5("Calibrated Plates"), DTOutput("interPlateCalibration")),
-              fluidRow(column(8, h5("Inter-Plate Calibrators"), DTOutput("extractedIPCsTable")),
-                       column(4, h5("Calibration Factors"), DTOutput("tableCalibrationFactors")),
-              )
+              fluidRow(
+                column(6, h5("Calibrated Plates"), dataTableOutput("interPlateCalibration")),
+                column(
+                  6, h5("Inter-Plate Calibrators"), dataTableOutput("extractedIPCsTable"),
+                  h5("Calibration Factors"), dataTableOutput("tableCalibrationFactors")
+                )
               ), br(), br(),
               fluidRow(column(12, plotlyOutput("comparisonCalibrated")))
             )
@@ -566,7 +566,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(h5("dCq Graph Output"), plotlyOutput("ddctMultiAbsGraph", width = "100%", height = "50%")), br(),
-              h5("dCq Table Output"), fluidRow(DTOutput("ddctAbsoluteMulti"))
+              h5("dCq Table Output"), fluidRow(dataTableOutput("ddctAbsoluteMulti"))
             )
           ),
           tabPanel(
@@ -574,7 +574,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedMulti",
               fluidRow(h5("ddCq Graph Output"), plotlyOutput("ddctRelGraphMulti", width = "100%", height = "50%")), br(),
-              h5("ddCq Table Output"), DTOutput("ddctRelativeMulti")
+              h5("ddCq Table Output"), dataTableOutput("ddctRelativeMulti")
             )
           ),
           #     tabPanel(
@@ -592,14 +592,14 @@ ui <- page_navbar(
           tabPanel(
             "Statistical Analysis", h4("Statistical Analysis", align = "center"), h5("Function for detecting differentially expressed genes"),
             br(),
-            DTOutput("resultLimmaMulti")
+            dataTableOutput("resultLimmaMulti")
           )
         )
       )
     )
   ),
   tabPanel("Help & About",
-    icon = icon("circle-question"),
+    icon = icon("question-circle"),
     value = "help",
     includeHTML("help.html")
   )
