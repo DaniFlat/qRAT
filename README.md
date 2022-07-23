@@ -31,6 +31,14 @@ BiocManager::install("limma")
 require('devtools')
 install_github('DaniFlat/qRAT')
 ```
+4. Load the libraries and start the application with the following commands
+```
+library(HTqPCR)
+library(ddCt)
+library(limma)
+library(qRAT)
+qRAT()
+```
 
 ## Web Application
 
