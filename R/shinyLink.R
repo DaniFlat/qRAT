@@ -16,3 +16,11 @@ shinyLink <- function(to, label) {
 	role = "button"
     )
 }
+
+shinyLinkInText <- function(to, label) {
+  tags$a(
+    class = "shiny__link",
+    href = to,
+    label
+  )
+}

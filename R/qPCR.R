@@ -1,6 +1,6 @@
 ####
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.4
+# version: 0.1.5
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -39,25 +39,18 @@
 
 read.qPCRtable <- function(fname, na.value = 40, ...) {
   if (missing(fname)) stop("No input fname specified")
-  dt.raw <- read.table(fname, header = TRUE, ...)
+  dt.raw <- fread(fname, header = TRUE, ...)
   for (cc in colnames(dt.raw)) {
-    dcc <- dt.raw[, cc]
+    dcc <- dt.raw[, ..cc]
     if (is.character(dcc)) dcc[is.na(dcc)] <- "NA"
     dt.raw[, cc] <- dcc
   }
 
 
-  ## check column names
+  ## check replicate column
   cnames <- colnames(dt.raw)
-  if (sum(cnames == "Ct") < 1) showNotification("'Cq' column is required!", type = "error", duration = 5)
-  if (sum(cnames == "Well") < 1) showNotification("'Well' column is required!", type = "error", duration = 5)
-  if (sum(cnames == "Gene") < 1) showNotification("'Gene' column is required!", type = "error", duration = 5)
-  if (sum(cnames == "Sample") < 1) { ## && ! any(grepl("^ds\\.", cnames)))
-    showNotification("'Sample' column not found.", type = "error", duration = 5)
-  }
-  if (sum(cnames == "rp.num") < 1) showNotification("'rp.num' column for repeat number is required!", type = "error", duration = 5)
   tbs <- table(dt.raw$rp.num)
-  if (min(tbs) != max(tbs)) showNotification("Repeats should be identical accross all samples!", type = "error", duration = 5)
+  if (min(tbs) != max(tbs)) showNotification("Number of replicates should be identical accross all samples!", type = "error", duration = 5)
 
 
 
@@ -145,9 +138,9 @@ read.qPCRtable <- function(fname, na.value = 40, ...) {
 
 read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
   if (missing(fname)) stop("No input fname specified")
-  dt.raw <- read.table(fname, header = TRUE, ...)
+  dt.raw <- fread(fname, header = TRUE, ...)
   for (cc in colnames(dt.raw)) {
-    dcc <- dt.raw[, cc]
+    dcc <- dt.raw[, ..cc]
     if (is.character(dcc)) dcc[is.na(dcc)] <- "NA"
     dt.raw[, cc] <- dcc
   }
