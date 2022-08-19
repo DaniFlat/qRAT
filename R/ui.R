@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.5
+# version: 0.1.6
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -53,6 +53,7 @@ library("magrittr")
 library("shinycssloaders")
 library("ggpubr")
 library("curl")
+library("viridisLite")
 
 ####
 # Loading Screen
@@ -149,7 +150,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "qRAT version"),
-            p(class = "card-text", "You're running: Version 0.1.5"),
+            p(class = "card-text", "You're running: Version 0.1.6"),
             p(class = "card-text", "It is recommended to check for Updates before using the application")
           )
         ),

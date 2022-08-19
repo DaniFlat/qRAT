@@ -1,5 +1,5 @@
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.5
+# version: 0.1.6
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -53,6 +53,7 @@ library("magrittr")
 library("shinycssloaders")
 library("ggpubr")
 library("curl")
+library("viridisLite")
 
 server <- function(input, output, session) {
 
@@ -89,7 +90,7 @@ server <- function(input, output, session) {
     }
 
     else {
-    runningVersion <- "0.1.5"
+    runningVersion <- "0.1.6"
     url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
     latestVersion <- readLines(url, n=1)
     if (runningVersion == latestVersion) {
@@ -101,8 +102,8 @@ server <- function(input, output, session) {
       )
     } else {
       show_alert(
-        title = "Update!",
-        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here!")),
+        title = "Update available!",
+        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here")),
         html = TRUE,
         type = "warning",
         showCloseButton = TRUE
@@ -113,45 +114,129 @@ server <- function(input, output, session) {
 
   # Button Citation
   observeEvent(input$Citation, {
-    show_alert(
+    showModal(modalDialog(
       title = "Citation",
-      text = tags$span("If you use qRAT in published research, please cite the following paper:", tags$br(),
-                       tags$a(href = "https://doi.org/10.1186/s12859-022-04823-7", "qRAT"), tags$br(),
-                       "If you use ddCq values, please also cite the paper for:", tags$br(),
-                       tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.ddCt", "ddCt"), tags$br(),
-                       "If you use the statistical analysis, please also cite the paper for:", tags$br(),
-                       tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.limma", "limma"), tags$br()
+      tags$span("If you use qRAT in published research, please cite the following paper:",
+      tags$a(href = "https://doi.org/10.1186/s12859-022-04823-7", "qRAT"), tags$br(),
+      "If you use ddCq values, please also cite the paper for:",
+      tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.ddCt", "ddCt"), tags$br(),
+      "If you use the statistical analysis, please also cite the paper for:",
+      tags$a(href = "https://doi.org/doi:10.18129/B9.bioc.limma", "limma"), tags$br()
       ),
-      html = TRUE,
-      showCloseButton = TRUE
-    )
+      footer = tagList(
+        modalButton("Close (Esc)"))
+    ))
   })
 
   # Button housekeepingInfo
   observeEvent(input$housekeepingInfo, {
-    show_alert(
+    showModal(modalDialog(
       title = "Reference Genes",
-      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
+      tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
 			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
         tags$br(),
         tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
       ),
-      html = TRUE
-    )
+      footer = tagList(
+        modalButton("Close (Esc)"))
+    ))
   })
 
   # Button housekeepingInfo Multiple Plates
   observeEvent(input$housekeepingInfoMP, {
-    show_alert(
+    showModal(modalDialog(
       title = "Reference Genes",
-      text = tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
+      tags$span("The stability of all appointed reference genes needs to be validated in advance. Popular algorithms to determine the most stable reference (housekeeping) genes
 			from a set of candidate reference are geNorm, BestKeeper and NormFinder. On average 2-4 reference genes should ideally be used for final normalization in a given experiment.",
-                       tags$br(),
-                       tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
+                tags$br(),
+                tags$a(href = "https://doi.org/10.1186%2Fgb-2002-3-7-research0034", "More Information")
       ),
-      html = TRUE
-    )
+      footer = tagList(
+        modalButton("Close (Esc)"))
+    ))
   })
+
+
+  check_filetype <- function(failed = FALSE) {
+    modalDialog(
+      title = "File Upload",
+
+      if (failed){
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Invalid file type", style = "color: red;"))}
+      else {
+        removeModal()
+      },
+      footer = tagList(
+        modalButton("Close (Esc)")
+      )
+    )
+  }
+
+  SP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
+    modalDialog(
+      title = "Validate Single Plate File",
+
+        div(icon("circle-check", style = "color: green;"), tags$b("File type is correct.", style = "color: green;")),
+
+      if (Sample_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Sample Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Sample Column is missing...", style = "color: red;"))
+      },
+      if (Well_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Well Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Well Column is missing...", style = "color: red;"))
+      },
+      if (Gene_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Gene Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Gene Column is missing...", style = "color: red;"))
+      },
+      if (Cq_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Cq Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Cq Column is missing...", style = "color: red;"))
+      },
+
+      footer = tagList(
+        modalButton("Close (Esc)")
+      )
+    )
+  }
+
+  MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
+    modalDialog(
+      title = "Validate Multiple Plate Files",
+
+      div(icon("circle-check", style = "color: green;"), tags$b("File type is correct.", style = "color: green;")),
+
+      if (Sample_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Sample Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Sample Column is missing...", style = "color: red;"))
+      },
+      if (Well_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Well Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Well Column is missing...", style = "color: red;"))
+      },
+      if (Gene_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Gene Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Gene Column is missing...", style = "color: red;"))
+      },
+      if (Cq_Column){
+        div(icon("circle-check", style = "color: green;"), tags$b("Found Cq Column", style = "color: green;"))}
+      else {
+        div(icon("circle-exclamation", style = "color: red;"), tags$b("Cq Column is missing...", style = "color: red;"))
+      },
+
+      footer = tagList(
+        modalButton("Close (Esc)")
+      )
+    )
+  }
 
   ####
   # Data Processing
@@ -181,6 +266,18 @@ server <- function(input, output, session) {
       filex <- f$datapath
     }
 
+    #Check file type
+    req(input$dtfile)
+      ext <- tools::file_ext(f$datapath)
+      if (!ext %in% c(
+        'text/csv',
+        'text/comma-separated-values',
+        'text/tab-separated-values',
+        'text/plain',
+        'csv',
+        'tsv')) {
+        showModal(check_filetype(failed = TRUE))
+      }
 
     # Scan through beginning of file, max 100 lines and look for row with "Well"
     file.header <- readLines(con = filex, n = 100)
@@ -199,12 +296,16 @@ server <- function(input, output, session) {
 
     column_names <- colnames(SP_data)
 
-    if (length(intersect(sampleColumnList,column_names)) < 1) showNotification("Sample Column is missing", type = "error", duration = 10)
-    if (length(intersect(wellColumnList,column_names)) < 1) showNotification("Well Column is missing", type = "error", duration = 10)
-    if (length(intersect(geneColumnList,column_names)) < 1) showNotification("Gene Column is missing", type = "error", duration = 10)
-    if (length(intersect(cqColumnList,column_names)) < 1) showNotification("Cq Column is missing", type = "error", duration = 10)
+    validateInputFile <- function(Sample_Column=TRUE, Well_Column=TRUE, Gene_Column=TRUE, Cq_Column=TRUE) {
+      if (length(intersect(sampleColumnList,column_names)) < 1) Sample_Column = FALSE
+      if (length(intersect(wellColumnList,column_names)) < 1) Well_Column = FALSE
+      if (length(intersect(geneColumnList,column_names)) < 1) Gene_Column = FALSE
+      if (length(intersect(cqColumnList,column_names)) < 1) Cq_Column = FALSE
 
+      showModal(SP_validateInputFile(Sample_Column, Well_Column, Gene_Column, Cq_Column))
+    }
 
+    validateInputFile()
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
     SP_data <- SP_data %>%
@@ -385,6 +486,20 @@ server <- function(input, output, session) {
     }
     filelist <- list()
 
+    #Check file type
+    req(input$plates)
+    for (i in 1:numfiles) {
+      ext <- tools::file_ext(ff[[i, "datapath"]])
+    if (!ext %in% c(
+      'text/csv',
+      'text/comma-separated-values',
+      'text/tab-separated-values',
+      'text/plain',
+      'csv',
+      'tsv')) {
+      showModal(check_filetype(failed = TRUE))
+    }}
+
     for (i in 1:numfiles) {
       file <- ff[[i, "datapath"]]
       file.header <- readLines(con = file, n = 100)
@@ -394,9 +509,7 @@ server <- function(input, output, session) {
       }
       filelist[[i]] <- fread(file, header = TRUE, sep = sep, skip = n.header)
     }
-
     multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
-
 
 
     ##Validate Input Data File
@@ -406,10 +519,16 @@ server <- function(input, output, session) {
 
     column_names <- colnames(multiplePlates)
 
-    if (length(intersect(sampleColumnList,column_names)) < 1) showNotification("Sample Column is missing", type = "error", duration = 10)
-    if (length(intersect(wellColumnList,column_names)) < 1) showNotification("Well Column is missing", type = "error", duration = 10)
-    if (length(intersect(geneColumnList,column_names)) < 1) showNotification("Gene Column is missing", type = "error", duration = 10)
-    if (length(intersect(cqColumnList,column_names)) < 1) showNotification("Cq Column is missing", type = "error", duration = 10)
+    validateInputFile <- function(Sample_Column=TRUE, Well_Column=TRUE, Gene_Column=TRUE, Cq_Column=TRUE) {
+      if (length(intersect(sampleColumnList,column_names)) < 1) Sample_Column = FALSE
+      if (length(intersect(wellColumnList,column_names)) < 1) Well_Column = FALSE
+      if (length(intersect(geneColumnList,column_names)) < 1) Gene_Column = FALSE
+      if (length(intersect(cqColumnList,column_names)) < 1) Cq_Column = FALSE
+
+      showModal(MP_validateInputFile(Sample_Column, Well_Column, Gene_Column, Cq_Column))
+    }
+
+    validateInputFile()
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
     multiplePlates <- multiplePlates %>%
@@ -1154,6 +1273,8 @@ server <- function(input, output, session) {
     PlotScale <- input$scale_dCq
 
 
+
+
     info <- resultDdct()
     if (is.null(info)) {
       return(NULL)
@@ -1180,11 +1301,25 @@ server <- function(input, output, session) {
       mutate(Sample = as.character(Sample)) %>%
       filter(Sample %in% input$SamplePicker)
 
+    # colour brewer; create colour pallette based on user input and number of genes
+    numberOfGenes <- n_distinct(df$Gene)
+    GeneNames <- pull(distinct(df, Gene))
+    GeneNames <- droplevels(GeneNames)
+
+    if (colorPick == "viridis") {
+      colourpalette <- viridis(numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    } else {
+      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+
+    }
+
 
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
+                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
 
       if (scalePick == "normal") {
@@ -1204,7 +1339,7 @@ server <- function(input, output, session) {
                             "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_brewer(palette = colorPick)+
+        scale_fill_manual(values = colourpalette)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
@@ -1275,12 +1410,22 @@ server <- function(input, output, session) {
       yTitle <- "\u0394\u0394Cq"
     }
 
-
+    # colour brewer; create colour pallette based on user input and number of genes
+    numberOfGenes <- n_distinct(df$Gene)
+    GeneNames <- pull(distinct(df, Gene))
+    GeneNames <- droplevels(GeneNames)
+    if (colorPick == "viridis") {
+      colourpalette <- viridis(numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    } else {
+      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    }
 
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
+                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
 
       if (scalePick == "normal") {
@@ -1300,7 +1445,7 @@ server <- function(input, output, session) {
                                         "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_brewer(palette = colorPick)+
+        scale_fill_manual(values = colourpalette)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
@@ -1628,11 +1773,22 @@ server <- function(input, output, session) {
       mutate(Sample = as.character(Sample)) %>%
       filter(Sample %in% c(SamplePicker))
 
+    # colour brewer; create colour pallette based on user input and number of genes
+    numberOfGenes <- n_distinct(df$Gene)
+    GeneNames <- pull(distinct(df, Gene))
+    GeneNames <- droplevels(GeneNames)
+    if (colorPick == "viridis") {
+      colourpalette <- viridis(numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    } else {
+      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    }
 
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
+                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
 
       if (scalePick == "normal") {
@@ -1652,7 +1808,7 @@ server <- function(input, output, session) {
                                         "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_brewer(palette = colorPick)+
+        scale_fill_manual(values = colourpalette)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
@@ -1723,10 +1879,22 @@ server <- function(input, output, session) {
       mutate(Sample = as.character(Sample)) %>%
       filter(Sample %in% c(SamplePicker))
 
+    # colour brewer; create colour pallette based on user input and number of genes
+    numberOfGenes <- n_distinct(df$Gene)
+    GeneNames <- pull(distinct(df, Gene))
+    GeneNames <- droplevels(GeneNames)
+    if (colorPick == "viridis") {
+      colourpalette <- viridis(numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    } else {
+      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- setNames(colourpalette, GeneNames)
+    }
+
     if (PlotType == "Bar Chart") {
       figNormal <- plot_ly(df[order(df$Gene), ],
                            x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colorPick, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
+                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
         layout(barmode = "group", bargroupgap = 0.1)
 
       if (scalePick == "normal") {
@@ -1746,7 +1914,7 @@ server <- function(input, output, session) {
                                         "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_brewer(palette = colorPick)+
+        scale_fill_manual(values = colourpalette)+
         theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 

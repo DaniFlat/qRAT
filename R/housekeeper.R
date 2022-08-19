@@ -1,6 +1,6 @@
 ####
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.5
+# version: 0.1.6
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT

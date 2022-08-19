@@ -1,6 +1,6 @@
 Package: qRAT
 Title: qPCR relative expression analysis tool
-Version: 0.1.5
+Version: 0.1.6
 Authors@R: 
     person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8221-9695"))
@@ -30,6 +30,7 @@ Imports:
     shinycssloaders,
     ggpubr,
     curl,
+    viridisLite,
     pkgload
 Suggests:
     BiocManager

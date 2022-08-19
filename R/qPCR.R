@@ -1,6 +1,6 @@
 ####
 # qPCR - Relative Expression Analysis Tool
-# version: 0.1.5
+# version: 0.1.6
 #
 # PLEASE CITE
 # Please cite the published manuscript in all studies using qRAT
@@ -238,9 +238,10 @@ calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, adjustMethod
   }
   res <- NULL
   vss <- NULL
-  if (!ref.Gene %in% fData(dt)$featureNames) {
-    return(results)
-  }
+  #if (!ref.Gene %in% fData(dt)$featureNames) {
+  #  return(results)
+  #}
+
   d.norm <- normalizeCtData(dt, deltaCt.genes = ref.Gene, norm = norm.method, verbose = verbose)
   results$d.norm <- d.norm
 
