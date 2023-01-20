@@ -1,4 +1,7 @@
-# Run the application 
+#' @name qRAT - qPCR Relative Expression Analysis Tool
+#' @author Daniel Flatschacher
+#' @title Run the shiny application
+
 qRAT <- function(...) {
 
 addResourcePath(prefix = "www", directoryPath = "./www")

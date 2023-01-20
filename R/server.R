@@ -1,37 +1,27 @@
-# qPCR - Relative Expression Analysis Tool
-# version: 0.1.6
-#
-# PLEASE CITE
-# Please cite the published manuscript in all studies using qRAT
-# For authors and journal information, please refer to the qRAT website https://uibk.ac.at/microbiology/services/qrat
-#
-#
-# MIT License
-#
-# Copyright (c) 2022 Daniel Flatschacher
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+#' @name qRAT - qPCR Relative Expression Analysis Tool
+#' @title Main functions for the qRAT Shiny app
+#' @author Daniel Flatschacher
 ####
 
 ####
 # Packages
 ####
+
+#' @import shiny
+#' @import ggplot2
+#' @importFrom shinyjs runExample alert
+#' @importFrom DT dataTableOutput renderDataTable JS
+#' @importFrom dplyr last first between summarize
+#' @importFrom magrittr extract
+#' @importFrom methods show
+#' @importFrom methods removeClass
+#' @importFrom tools file_ext
+#' @importFrom HTqPCR normalizeCtData limmaCtData
+#' @importFrom limma makeContrasts
+#' @importFrom plotly renderPlotly ggplotly plotlyOutput
+#' @importFrom shinyWidgets virtualSelectInput
+#' @importFrom shinyjqui orderInput
+
 
 library("shiny")
 library("bslib")
@@ -39,10 +29,9 @@ library("shinyWidgets")
 library("HTqPCR")
 library("ddCt")
 library("plotly")
-library("shinyjs")
-library("ggplot2")
+#library("shinyjs")
+#library("ggplot2")
 library("scales")
-library("xtable")
 library("data.table")
 library("DT")
 library("dplyr")
@@ -51,9 +40,9 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
-library("ggpubr")
 library("curl")
 library("viridisLite")
+library("shinyjqui")
 
 server <- function(input, output, session) {
 
@@ -67,11 +56,8 @@ server <- function(input, output, session) {
     Sys.sleep(runif(1) / 2)
     hostess$set(i * 10)
   }
-
   waiter_hide()
 
-  # loader for plots and tables
-  w <- Waiter$new(id = c("dataSinglePlate", "ddctAbsGraph"), html = spin_loader(), color = transparent(.5))
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
@@ -90,8 +76,8 @@ server <- function(input, output, session) {
     }
 
     else {
-    runningVersion <- "0.1.6"
-    url <- ("https://www.uibk.ac.at/microbiology/services/qrat/latest_version.txt")
+    runningVersion <- "0.1.7"
+    url <- ("https://www.uibk.ac.at/media/filer_public/13/98/1398cdf4-4d91-4e79-a83f-053ee594525a/latest_version.txt")
     latestVersion <- readLines(url, n=1)
     if (runningVersion == latestVersion) {
       show_alert(
@@ -156,6 +142,19 @@ server <- function(input, output, session) {
     ))
   })
 
+  # Button outlierSP
+  observeEvent(input$outlierSP, {
+    showModal(modalDialog(
+      title = "Define outlier",
+      tags$span("WIP define outlier; Wells marked as outlier will be neglected in subsequent filtering and analysis",
+                tags$br()
+      ),
+      DTOutput("defineOutlierSP"),
+      footer = tagList(
+        modalButton("Close (Esc)"))
+    ))
+  })
+
 
   check_filetype <- function(failed = FALSE) {
     modalDialog(
@@ -205,9 +204,13 @@ server <- function(input, output, session) {
     )
   }
 
-  MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
+  MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column, plateName) {
     modalDialog(
       title = "Validate Multiple Plate Files",
+
+    #  textOutput("plateName"), #this does not work yet; should show the filename of the respective plate
+
+      div(icon("circle-exclamation"), tags$b("Files will be checked one by one.")),
 
       div(icon("circle-check", style = "color: green;"), tags$b("File type is correct.", style = "color: green;")),
 
@@ -268,13 +271,14 @@ server <- function(input, output, session) {
 
     #Check file type
     req(input$dtfile)
-      ext <- tools::file_ext(f$datapath)
+      ext <- file_ext(f$datapath)
       if (!ext %in% c(
         'text/csv',
         'text/comma-separated-values',
         'text/tab-separated-values',
         'text/plain',
         'csv',
+        'txt',
         'tsv')) {
         showModal(check_filetype(failed = TRUE))
       }
@@ -306,6 +310,7 @@ server <- function(input, output, session) {
     }
 
     validateInputFile()
+
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
     SP_data <- SP_data %>%
@@ -363,6 +368,53 @@ server <- function(input, output, session) {
 
     experimental_controls <- input$NTC_Input
 
+
+
+
+    #####manual definition of outliers
+
+    # create a character vector of shiny inputs
+    shinyInput = function(FUN, len, id, value, ...) {
+      if (length(value) == 1) value <- rep(value, len)
+      inputs = character(len)
+      for (i in seq_len(len)) {
+        inputs[i] = as.character(FUN(paste0(id, i), label = NULL, value = value[i]))
+      }
+      inputs
+    }
+
+    # obtain the values of inputs
+    shinyValue = function(id, len) {
+      unlist(lapply(seq_len(len), function(i) {
+        value = input[[paste0(id, i)]]
+        if (is.null(value)) TRUE else value
+      }))
+    }
+
+    #prepare data for outlier definition
+    markOutlierTable <- xx
+    n <- nrow(markOutlierTable)
+    markOutlierTable %>%
+      mutate(outlier = shinyInput(checkboxInput, n, 'cb_', value = TRUE, width='1px')) %>%
+      mutate(YN = rep(TRUE, n))
+
+    ## Outlier Definition SP
+    loopData = reactive({
+      markOutlierTable$cb <<- shinyInput(checkboxInput, n, 'cb_', value = shinyValue('cb_', n), width='1px')
+      markOutlierTable$YN <<- shinyValue('cb_', n)
+      markOutlierTable
+    })
+
+    output$defineOutlierSP = DT::renderDataTable(
+      isolate(loopData()),
+      escape = FALSE, selection = 'none',
+      options = list(
+        dom = 't', paging = FALSE, ordering = FALSE,
+        preDrawCallback = JS('function() { Shiny.unbindAll(this.api().table().node()); }'),
+        drawCallback = JS('function() { Shiny.bindAll(this.api().table().node()); } ')
+      ))
+
+
     # remove (set to NA) replicates based on threshold (bad reps and max ct) and empty rows (no name, no gene)
     correctRep <- xx %>%
       group_by(Sample, Gene) %>%
@@ -373,6 +425,8 @@ server <- function(input, output, session) {
       filter(!Sample %in% experimental_controls) %>%
       filter(Gene != "") %>%
       ungroup()
+
+
 
     badRep <- correctRep %>%
       filter(is.na(Ct)) %>%
@@ -489,13 +543,14 @@ server <- function(input, output, session) {
     #Check file type
     req(input$plates)
     for (i in 1:numfiles) {
-      ext <- tools::file_ext(ff[[i, "datapath"]])
+      ext <- file_ext(ff[[i, "datapath"]])
     if (!ext %in% c(
       'text/csv',
       'text/comma-separated-values',
       'text/tab-separated-values',
       'text/plain',
       'csv',
+      'txt',
       'tsv')) {
       showModal(check_filetype(failed = TRUE))
     }}
@@ -508,27 +563,31 @@ server <- function(input, output, session) {
         n.header <- 0
       }
       filelist[[i]] <- fread(file, header = TRUE, sep = sep, skip = n.header)
+
+
+      ##Validate Input Data File
+      #change all column names to lowercase for easy comparison with prepared column-name-lists
+      column_namesTest <- tolower(names(filelist[[i]]))
+
+      validateInputFile <- function(Sample_Column=TRUE, Well_Column=TRUE, Gene_Column=TRUE, Cq_Column=TRUE, plateName) {
+        if (length(intersect(sampleColumnList,column_namesTest)) < 1) Sample_Column = FALSE
+        if (length(intersect(wellColumnList,column_namesTest)) < 1) Well_Column = FALSE
+        if (length(intersect(geneColumnList,column_namesTest)) < 1) Gene_Column = FALSE
+        if (length(intersect(cqColumnList,column_namesTest)) < 1) Cq_Column = FALSE
+
+        plateName <- ff$name
+
+        showModal(MP_validateInputFile(Sample_Column, Well_Column, Gene_Column, Cq_Column, plateName))
+      }
+
+      validateInputFile()
     }
+
     multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
 
-
-    ##Validate Input Data File
     #change all column names to lowercase for easy comparison with prepared column-name-lists
     multiplePlates <- multiplePlates %>%
       rename_with(tolower)
-
-    column_names <- colnames(multiplePlates)
-
-    validateInputFile <- function(Sample_Column=TRUE, Well_Column=TRUE, Gene_Column=TRUE, Cq_Column=TRUE) {
-      if (length(intersect(sampleColumnList,column_names)) < 1) Sample_Column = FALSE
-      if (length(intersect(wellColumnList,column_names)) < 1) Well_Column = FALSE
-      if (length(intersect(geneColumnList,column_names)) < 1) Gene_Column = FALSE
-      if (length(intersect(cqColumnList,column_names)) < 1) Cq_Column = FALSE
-
-      showModal(MP_validateInputFile(Sample_Column, Well_Column, Gene_Column, Cq_Column))
-    }
-
-    validateInputFile()
 
     ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
     multiplePlates <- multiplePlates %>%
@@ -689,6 +748,7 @@ server <- function(input, output, session) {
 
     return(list(SamplesNoIPCs = info2, xdata, data.ht = htset, data.ddct = ddset, CompSamples = Samples))
   })
+
 
 
 
@@ -995,7 +1055,7 @@ server <- function(input, output, session) {
 
       CalibrationFactors <- extractedIPCs %>%
         group_by(PlateNumber) %>%
-        dplyr::summarize(Mean = mean(CtDivGmean, na.rm = TRUE))
+        summarize(Mean = mean(CtDivGmean, na.rm = TRUE))
 
 
       return(list(extrIPCs = extractedIPCs, CalibrationFactors = CalibrationFactors))
@@ -1071,7 +1131,7 @@ server <- function(input, output, session) {
           list(
             extend = "",
             text = "Show All",
-            action = DT::JS(
+            action = JS(
               "function ( e, dt, node, config ) {
           dt.page.len(-1);
           dt.ajax.reload();}"
@@ -1080,7 +1140,7 @@ server <- function(input, output, session) {
           list(
             extend = "",
             text = "Show Less",
-            action = DT::JS(
+            action = JS(
               "function ( e, dt, node, config ) {
           dt.page.len(10);
           dt.ajax.reload();}"
@@ -1113,7 +1173,9 @@ server <- function(input, output, session) {
 
   output$dataSinglePlate <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- readSinglePlateData()
-    if (is.null(info)) NULL else info$data  %>% rename(Replicate = rp.num)
+    if (is.null(info)) NULL
+
+    info$data  %>% rename(Replicate = rp.num)
 
   })
 
@@ -1155,7 +1217,7 @@ server <- function(input, output, session) {
       geom_density() +
       geom_rug() +
       scale_color_brewer(palette = "Set1")+
-      theme_pubr(base_size=4.76 * .pt)+
+      #theme_pubr(base_size=4.76 * .pt)+
       list(ggplottheme)
 
     ggplotly(fig) %>%
@@ -1181,6 +1243,7 @@ server <- function(input, output, session) {
     data <- info$badReplicates %>%
       select(Well, Sample, Gene, rp.num, Cq) %>%
       rename(Replicate = rp.num)
+
     if (is.null(info)) NULL else data
   })
 
@@ -1260,6 +1323,7 @@ server <- function(input, output, session) {
   })
 
 
+
   ## dCt Expression Graph Single Plate
 
   output$ddctAbsGraph <- renderPlotly({
@@ -1271,9 +1335,7 @@ server <- function(input, output, session) {
     PlotWidth <- input$width_dCq
     PlotHeight <- input$height_dCq
     PlotScale <- input$scale_dCq
-
-
-
+    sampleOrder <- input$dest
 
     info <- resultDdct()
     if (is.null(info)) {
@@ -1301,6 +1363,7 @@ server <- function(input, output, session) {
       mutate(Sample = as.character(Sample)) %>%
       filter(Sample %in% input$SamplePicker)
 
+
     # colour brewer; create colour pallette based on user input and number of genes
     numberOfGenes <- n_distinct(df$Gene)
     GeneNames <- pull(distinct(df, Gene))
@@ -1310,7 +1373,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- brewer.pal(numberOfGenes, colorPick)
       colourpalette <- setNames(colourpalette, GeneNames)
 
     }
@@ -1340,7 +1403,7 @@ server <- function(input, output, session) {
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_manual(values = colourpalette)+
-        theme_pubr(base_size=4.76 * .pt)+
+       #theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
 
@@ -1361,7 +1424,7 @@ server <- function(input, output, session) {
         toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = TRUE, displayModeBar = TRUE
       ) %>%
       layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
-      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
+      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample", categoryorder = "array", categoryarray = sampleOrder), font=t, legend = list(title = list(text = "Genes")))
 
     fig
   })
@@ -1399,6 +1462,7 @@ server <- function(input, output, session) {
         mutate(Sample = as.character(Sample)) %>%
         filter(Sample %in% c(SamplePicker))
 
+
     # get the correct data for plot depending on user input (FC or ddCT values)
     if (PlotDataPick == "Fold Change") {
       PlotDataError <- "FC.sd"
@@ -1418,7 +1482,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- brewer.pal(numberOfGenes, colorPick)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
@@ -1446,7 +1510,7 @@ server <- function(input, output, session) {
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_manual(values = colourpalette)+
-        theme_pubr(base_size=4.76 * .pt)+
+        #theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
 
@@ -1524,7 +1588,7 @@ server <- function(input, output, session) {
       geom_density() +
       geom_rug() +
       scale_color_brewer(palette = "Set1")+
-      theme_pubr(base_size=4.76 * .pt)+
+      #theme_pubr(base_size=4.76 * .pt)+
       list(ggplottheme)
 
     ggplotly(fig) %>%
@@ -1663,20 +1727,20 @@ server <- function(input, output, session) {
 
       calibrated <- info$calibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
-        dplyr::summarize(MeanCq = mean(Ct, na.rm=TRUE))
+        summarize(MeanCq = mean(Ct, na.rm=TRUE))
       calibrated_sd <- info$calibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
-        dplyr::summarize(sdCq = sd(Ct, na.rm = TRUE))
+        summarize(sdCq = sd(Ct, na.rm = TRUE))
       calibrated <- data.frame(calibrated, calibrated_sd$sdCq)
       calibrated <- rename(calibrated, c("sdCq" = "calibrated_sd.sdCq"))
 
 
       noncalibrated <- info$noncalibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
-        dplyr::summarize(MeanCq = mean(Ct, na.rm=TRUE))
+        summarize(MeanCq = mean(Ct, na.rm=TRUE))
       noncalibrated_sd <- info$noncalibrated  %>%
         group_by(Sample_Gene, PlateNumber) %>%
-        dplyr::summarize(sdCq = sd(Ct, na.rm = TRUE))
+        summarize(sdCq = sd(Ct, na.rm = TRUE))
       noncalibrated <- data.frame(noncalibrated, noncalibrated_sd$sdCq)
       noncalibrated <- rename(noncalibrated, c("sdCq" = "noncalibrated_sd.sdCq"))
 
@@ -1781,7 +1845,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- brewer.pal(numberOfGenes, colorPick)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
@@ -1809,7 +1873,7 @@ server <- function(input, output, session) {
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_manual(values = colourpalette)+
-        theme_pubr(base_size=4.76 * .pt)+
+        #theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
 
@@ -1887,7 +1951,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- get_palette(palette = colorPick, numberOfGenes)
+      colourpalette <- brewer.pal(numberOfGenes, colorPick)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
@@ -1915,7 +1979,7 @@ server <- function(input, output, session) {
           position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
         geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
         scale_fill_manual(values = colourpalette)+
-        theme_pubr(base_size=4.76 * .pt)+
+        #theme_pubr(base_size=4.76 * .pt)+
         list(ggplottheme)
 
 
@@ -1956,6 +2020,8 @@ server <- function(input, output, session) {
         filter(!is.na(Ct)) %>%
         count(Sample, Gene) %>%
         filter(n < 2)
+
+      print(countReplicates)
     }
 
     output$countTable <- renderDT(countReplicates)

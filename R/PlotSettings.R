@@ -34,7 +34,7 @@ yaxis <- list(
   hoverformat = '.2f')
 
 #ggplot theme
-ggplottheme <- theme(axis.text.x=element_text(colour="black", face = "bold", family = fontfamily),
+ggplottheme <- theme(axis.text.x=element_text(colour="black", face = "bold", family = fontfamily, size = 4.76 * .pt),
                     axis.text.y=element_text(colour="black", face = "bold", family = fontfamily),
                     axis.title.x = element_text(family = fontfamily),
                     axis.title.y = element_text(family = fontfamily),

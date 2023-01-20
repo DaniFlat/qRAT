@@ -1,32 +1,6 @@
-# qPCR - Relative Expression Analysis Tool
-# version: 0.1.6
-#
-# PLEASE CITE
-# Please cite the published manuscript in all studies using qRAT
-# For authors and journal information, please refer to the qRAT website https://uibk.ac.at/microbiology/services/qrat
-#
-#
-# MIT License
-#
-# Copyright (c) 2022 Daniel Flatschacher
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+#' @name qRAT - qPCR Relative Expression Analysis Tool
+#' @title UI for the qRAT Shiny app
+#' @author Daniel Flatschacher
 ####
 
 ####
@@ -39,10 +13,9 @@ library("shinyWidgets")
 library("HTqPCR")
 library("ddCt")
 library("plotly")
-library("shinyjs")
-library("ggplot2")
+#library("shinyjs")
+#library("ggplot2")
 library("scales")
-library("xtable")
 library("data.table")
 library("DT")
 library("dplyr")
@@ -51,7 +24,6 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
-library("ggpubr")
 library("curl")
 library("viridisLite")
 
@@ -150,7 +122,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "qRAT version"),
-            p(class = "card-text", "You're running: Version 0.1.6"),
+            p(class = "card-text", "You're running: Version 0.1.7"),
             p(class = "card-text", "It is recommended to check for Updates before using the application")
           )
         ),
@@ -181,7 +153,7 @@ ui <- page_navbar(
     ),
     p(),
     p(),
-    p(class = "text-muted text-center", "Copyright ©2021-2022 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
+    p(class = "text-muted text-center", "Copyright ©2021-2023 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
   ),
   tabPanel("Single Plate",
     icon = icon("stop"),
@@ -215,6 +187,8 @@ ui <- page_navbar(
           condition = "input.tabsSingle=='Filtering & Quality'",
           h4("Analysis Input"),
           h5("Filtering"),
+          h5("Define Outlier (optional)"),
+          actionLink(icon = icon("circle-info"), label=NULL, style="color: #325d88", inputId = "outlierSP"),
           helpText("Set a range of acceptable Cq values"),
           sliderInput("maxCt", "Cq Cut-off", min = 0, max = 45, value = c(5, 35), step = 1),
           helpText("Set max deviation between replicates (from mean)"),
@@ -276,6 +250,8 @@ ui <- page_navbar(
           h4("Analysis Input"),
           virtualSelectInput(inputId = "limma_input", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
+          helpText("The sample names must be syntactically valid variable names in R and so, for example, must
+          begin with a letter rather than a numeral. Special characters (also '.', '_', etc. should be avoided)"),
           h5("Parameters"),
           helpText("Adjust p-values"),
           virtualSelectInput(inputId = "adjustMethod", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
@@ -321,7 +297,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "output.fileUploadedSingle",
               fluidRow(
-                column(5, h5("Data Table"), DTOutput("dataSinglePlate") %>% withSpinner()),
+                column(5, h5("Data Table"), DTOutput("dataSinglePlate")),
                 column(6, h5(""), plotlyOutput("plotCtCard"), plotlyOutput("plotCtDistrib"))
               )
             )
@@ -489,6 +465,8 @@ ui <- page_navbar(
           h4("Analysis Input"),
           virtualSelectInput(inputId = "limma_inputMulti", label = "Limma Input", choices = c("dCq")),
           h5("Statistical Analysis"),
+          helpText("The sample names must be syntactically valid variable names in R and so, for example, must
+          begin with a letter rather than a numeral. Special characters (also '.', '_', etc. should be avoided)"),
           h5("Parameters"),
           helpText("Adjust p-values"),
           virtualSelectInput(inputId = "adjustMethodMulti", label = "Adjustment Method", choices = c("Benjamini & Hochberg", "Holm", "Bonferroni")),
