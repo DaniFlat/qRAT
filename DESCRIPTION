@@ -27,7 +27,6 @@ Imports:
     stringr,
     magrittr,
     shinycssloaders,
-    curl,
     viridisLite,
     pkgload,
     shinyjqui,
