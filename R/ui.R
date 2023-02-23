@@ -121,7 +121,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "qRAT version"),
-            p(class = "card-text", "You're running: Version 0.1.7"),
+            p(class = "card-text", "You're running: Version 0.1.8"),
             p(class = "card-text", "It is recommended to check for Updates before using the application")
           )
         ),
