@@ -61,41 +61,50 @@ server <- function(input, output, session) {
 
   # Button UpdateCheck
   observeEvent(input$updateCheck, {
-    if (!has_internet()) {
 
+    show_alert(
+              title = "Check for Updates",
+              text = tags$span("Visit the website to check for updates.", tags$br(), tags$br(), tags$a(href = "https://www.uibk.ac.at/de/microbiology/services/qrat/", "Go to the website")),
+              html = TRUE,
+              type = "info",
+              showCloseButton = TRUE
+            )
 
-      show_alert(
-        title = "Error",
-        text = "No internet connection available, please try again later.",
-        type = "warning",
-        showCloseButton = TRUE
-      )
-
-      return(NULL)
-
-    }
-
-    else {
-    runningVersion <- "0.1.7"
-    url <- ("https://www.uibk.ac.at/media/filer_public/13/98/1398cdf4-4d91-4e79-a83f-053ee594525a/latest_version.txt")
-    latestVersion <- readLines(url, n=1)
-    if (runningVersion == latestVersion) {
-      show_alert(
-        title = "Alright,",
-        text = "you're running the latest version!",
-        type = "success",
-        showCloseButton = TRUE
-      )
-    } else {
-      show_alert(
-        title = "Update available!",
-        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here")),
-        html = TRUE,
-        type = "warning",
-        showCloseButton = TRUE
-      )
-    }
-    }
+#    if (!has_internet()) {
+#
+#
+#      show_alert(
+#        title = "Error",
+#        text = "No internet connection available, please try again later.",
+#        type = "warning",
+#        showCloseButton = TRUE
+#      )
+#
+#      return(NULL)
+#
+#    }
+#
+#    else {
+#    runningVersion <- "0.1.7"
+#    url <- ("https://www.uibk.ac.at/media/filer_public/13/98/1398cdf4-4d91-4e79-a83f-053ee594525a/latest_version.txt")
+#    latestVersion <- readLines(url, n=1)
+#    if (runningVersion == latestVersion) {
+#      show_alert(
+#        title = "Alright,",
+#        text = "you're running the latest version!",
+#        type = "success",
+#        showCloseButton = TRUE
+#      )
+#    } else {
+#      show_alert(
+#        title = "Update available!",
+#        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here")),
+#        html = TRUE,
+#        type = "warning",
+#        showCloseButton = TRUE
+#      )
+#    }
+#    }
   })
 
   # Button Citation
