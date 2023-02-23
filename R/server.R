@@ -1382,7 +1382,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- brewer.pal(numberOfGenes, colorPick)
+      colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
 
     }
@@ -1491,7 +1491,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- brewer.pal(numberOfGenes, colorPick)
+      colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
@@ -1854,7 +1854,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- brewer.pal(numberOfGenes, colorPick)
+      colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
@@ -1960,7 +1960,7 @@ server <- function(input, output, session) {
       colourpalette <- viridis(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     } else {
-      colourpalette <- brewer.pal(numberOfGenes, colorPick)
+      colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
       colourpalette <- setNames(colourpalette, GeneNames)
     }
 
