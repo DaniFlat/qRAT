@@ -49,6 +49,10 @@ library(shinycssloaders)
 library(curl)
 library(viridisLite)
 library(shinyjqui)
+library(plotly)
+library(shinyjs)
+library(ggplot2)
+library(shinyWidgets)
 qRAT()
 ```
 
