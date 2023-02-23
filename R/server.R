@@ -40,7 +40,6 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
-library("curl")
 library("viridisLite")
 library("shinyjqui")
 
