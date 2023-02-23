@@ -1,6 +1,6 @@
 Package: qRAT
 Title: qPCR relative expression analysis tool
-Version: 0.1.7
+Version: 0.1.8
 Authors@R: 
     person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8221-9695"))
