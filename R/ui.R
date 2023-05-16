@@ -24,6 +24,7 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
+#library("curl")
 library("viridisLite")
 
 ####
@@ -121,7 +122,7 @@ ui <- page_navbar(
           div(
             class = "card-body",
             h4(class = "card-title", "qRAT version"),
-            p(class = "card-text", "You're running: Version 0.1.8"),
+            p(class = "card-text", "You're running: Version 0.2.0"),
             p(class = "card-text", "It is recommended to check for Updates before using the application")
           )
         ),
@@ -213,18 +214,43 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsSingle=='Relative dCq'",
           h5("Plot Settings"),
-          helpText("Customize Plot Appearance"),
-          virtualSelectInput(inputId = "PlotData", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          virtualSelectInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE),
-          virtualSelectInput(inputId = "PlotType", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          virtualSelectInput(inputId = "colorpicker", label = "Pick Colors", choices = colorlist),
-          virtualSelectInput(inputId = "scale", label = "Scale", choices = c("normal", "log")),
+          helpText("Show Settings"),
+          switchInput(inputId = "show_plot_settings_dCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_plot_settings_dCq == true",
+            virtualSelectInput(inputId = "PlotData", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
+            virtualSelectInput(inputId = "SamplePicker", label = "Samples", choices = "", multiple = TRUE),
+            virtualSelectInput(inputId = "GenePicker", label = "Genes", choices = "", multiple = TRUE),
+            virtualSelectInput(inputId = "PlotType", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+            checkboxInput("ShowErrorBar", "Show error bars", FALSE),
+            virtualSelectInput(inputId = "scale", label = "Scale", choices = c("normal", "log"))),
+
+          h5("Customize Plot Appearance"),
+          helpText("Show Appearance Settings"),
+          switchInput(inputId = "show_appearance_settings_dCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_appearance_settings_dCq == true",
+            virtualSelectInput(inputId = "colorpicker", label = "Pick Colors", choices = colorlist),
+            h6("Define Sample Order"),
+            helpText("Drag and Drop Samples"),
+            orderInput("x_order", "", items = NULL, width = "100%"),
+            h6("X Axis Text Angle"),
+            helpText("Rotation angle of x axis labels"),
+            sliderTextInput(inputId = "xTextAngle_dCq", label = "", choices = c(0, 30, 45, 60, 90), grid = TRUE),
+            textInput(inputId = "plotTitle_dCq", label = "Plot Title", value = "", width = NULL, placeholder = NULL),
+            textInput(inputId = "legendTitle_dCq", label = "Legend Title", value = "Genes", width = NULL, placeholder = "Genes"),
+            virtualSelectInput(inputId = "legendPosition_dCq", label = "Legend Position", choices = c("right", "none"))),
+
           h5("Plot Export"),
-          virtualSelectInput(inputId = "exportFormat", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
-          numericInput("width_dCq", label = "Width", value = 800),
-          numericInput("height_dCq", label = "Height", value = 800),
-          numericInput("scale_dCq", label = "Scale", value = 3),
-          helpText("set scale to 3 for 300 dpi")
+          helpText("Show Plot Export Settings:"),
+          switchInput(inputId = "show_export_settings_dCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_export_settings_dCq == true",
+            virtualSelectInput(inputId = "exportFormat", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+            numericInput("width_dCq", label = "Width", value = 800),
+            numericInput("height_dCq", label = "Height", value = 800),
+            numericInput("scale_dCq", label = "Scale", value = 3),
+            helpText("set scale to 6 for 600 dpi"))
         ),
         conditionalPanel(
           condition = "input.tabsSingle=='Relative ddCq'",
@@ -232,17 +258,43 @@ ui <- page_navbar(
           helpText("Set Calibrator for ddCq"),
           virtualSelectInput("Mock", label = "Calibrator", choices = ""),
           h5("Plot Settings"),
-          helpText("Customize Plot Appearance"),
-          virtualSelectInput(inputId = "PlotDataDDCt", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          virtualSelectInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
-          virtualSelectInput(inputId = "PlotTypeDDCt", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          virtualSelectInput(inputId = "colorpickerDDCt", label = "Pick Colors", choices = colorlist),
-          virtualSelectInput(inputId = "scaleDDCt", label = "Scale", choices = c("normal", "log")),
-          virtualSelectInput(inputId = "exportFormatDDCt", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
-          numericInput("width_ddCq", label = "Width", value = 800),
-          numericInput("height_ddCq", label = "Height", value = 800),
-          numericInput("scale_ddCq", label = "Scale", value = 3),
-          helpText("set scale to 3 for 300 dpi")
+          helpText("Show Settings"),
+          switchInput(inputId = "show_plot_settings_ddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_plot_settings_ddCq == true",
+            virtualSelectInput(inputId = "PlotDataDDCt", label = "Plot Data", choices = c("Fold Change", "ddCt")),
+            virtualSelectInput("SamplePickerDDCt", label = "Samples", choices = "", multiple = TRUE),
+            virtualSelectInput("GenePickerDDCt", label = "Genes", choices = "", multiple = TRUE),
+            virtualSelectInput(inputId = "PlotTypeDDCt", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+            checkboxInput("ShowErrorBarDDCt", "Show error bars", FALSE),
+            virtualSelectInput(inputId = "scaleDDCt", label = "Scale", choices = c("normal", "log"))),
+
+          h5("Customize Plot Appearance"),
+          helpText("Show Appearance Settings"),
+          switchInput(inputId = "show_appearance_settings_ddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_appearance_settings_ddCq == true",
+            virtualSelectInput(inputId = "colorpickerDDCt", label = "Pick Colors", choices = colorlist),
+            h6("Define Sample Order"),
+            helpText("Drag and Drop Samples"),
+            orderInput("x_orderDDCt", "", items = NULL, width = "100%"),
+            h6("X Axis Text Angle"),
+            helpText("Rotation angle of x axis labels"),
+            sliderTextInput(inputId = "xTextAngle_ddCq", label = "", choices = c(0, 30, 45, 60, 90), grid = TRUE),
+            textInput(inputId = "plotTitle_ddCq", label = "Plot Title", value = "", width = NULL, placeholder = NULL),
+            textInput(inputId = "legendTitle_ddCq", label = "Legend Title", value = "Genes", width = NULL, placeholder = "Genes"),
+            virtualSelectInput(inputId = "legendPosition_ddCq", label = "Legend Position", choices = c("right", "none"))),
+
+          h5("Plot Export"),
+          helpText("Show Plot Export Settings:"),
+          switchInput(inputId = "show_export_settings_ddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_export_settings_ddCq == true",
+            virtualSelectInput(inputId = "exportFormatDDCt", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+            numericInput("width_ddCq", label = "Width", value = 800),
+            numericInput("height_ddCq", label = "Height", value = 800),
+            numericInput("scale_ddCq", label = "Scale", value = 3),
+            helpText("set scale to 6 for 600 dpi"))
         ),
         conditionalPanel(
           condition = "input.tabsSingle=='Statistical Analysis'",
@@ -429,17 +481,43 @@ ui <- page_navbar(
         conditionalPanel(
           condition = "input.tabsMulti=='Relative dCq'",
           h5("Plot Settings"),
-          helpText("Customize Plot Appearance"),
-          virtualSelectInput(inputId = "PlotDataMulti", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
-          virtualSelectInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE),
-          virtualSelectInput(inputId = "PlotTypeMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          virtualSelectInput(inputId = "colorpickerMulti", label = "Pick Colors", choices = colorlist),
-          virtualSelectInput(inputId = "scaleMulti", label = "Scale", choices = c("normal", "log")),
-          virtualSelectInput(inputId = "exportFormatMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
-          numericInput("width_dCqMulti", label = "Width", value = 800),
-          numericInput("height_dCqMulti", label = "Height", value = 800),
-          numericInput("scale_dCqMulti", label = "Scale", value = 3),
-          helpText("set scale to 3 for 300 dpi")
+          helpText("Show Settings"),
+          switchInput(inputId = "show_plot_settings_MultidCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_plot_settings_MultidCq == true",
+            virtualSelectInput(inputId = "PlotDataMulti", label = "Plot Data", choices = c("RQ", "dCq", "-dCq")),
+            virtualSelectInput("SamplePickerMulti", label = "Samples", choices = "", multiple = TRUE),
+            virtualSelectInput("GenePickerMulti", label = "Genes", choices = "", multiple = TRUE),
+            virtualSelectInput(inputId = "PlotTypeMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+            checkboxInput("ShowErrorBarMulti", "Show error bars", FALSE),
+            virtualSelectInput(inputId = "scaleMulti", label = "Scale", choices = c("normal", "log"))),
+
+          h5("Customize Plot Appearance"),
+          helpText("Show Appearance Settings"),
+          switchInput(inputId = "show_appearance_settings_MultidCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_appearance_settings_MultidCq == true",
+            virtualSelectInput(inputId = "colorpickerMulti", label = "Pick Colors", choices = colorlist),
+            h6("Define Sample Order"),
+            helpText("Drag and Drop Samples"),
+            orderInput("x_order_MultidCq", "", items = NULL, width = "100%"),
+            h6("X Axis Text Angle"),
+            helpText("Rotation angle of x axis labels"),
+            sliderTextInput(inputId = "xTextAngle_MultidCq", label = "", choices = c(0, 30, 45, 60, 90), grid = TRUE),
+            textInput(inputId = "plotTitle_MultidCq", label = "Plot Title", value = "", width = NULL, placeholder = NULL),
+            textInput(inputId = "legendTitle_MultidCq", label = "Legend Title", value = "Genes", width = NULL, placeholder = "Genes"),
+            virtualSelectInput(inputId = "legendPosition_MultidCq", label = "Legend Position", choices = c("right", "none"))),
+
+          h5("Plot Export"),
+          helpText("Show Plot Export Settings:"),
+          switchInput(inputId = "show_export_settings_MultidCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_export_settings_MultidCq == true",
+            virtualSelectInput(inputId = "exportFormatMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+            numericInput("width_dCqMulti", label = "Width", value = 800),
+            numericInput("height_dCqMulti", label = "Height", value = 800),
+            numericInput("scale_dCqMulti", label = "Scale", value = 3),
+            helpText("set scale to 6 for 600 dpi"))
         ),
         conditionalPanel(
           condition = "input.tabsMulti=='Relative ddCq'",
@@ -447,17 +525,43 @@ ui <- page_navbar(
           helpText("Set calibrator for ddCq"),
           virtualSelectInput("MockM", label = "Calibrator", choices = ""),
           h5("Plot Settings"),
-          helpText("Customize Plot Appearance"),
-          virtualSelectInput(inputId = "PlotDataDDCtMulti", label = "Plot Data", choices = c("Fold Change", "ddCt")),
-          virtualSelectInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
-          virtualSelectInput(inputId = "PlotTypeDDCtMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
-          virtualSelectInput(inputId = "colorpickerDDCtMulti", label = "Pick Colors", choices = colorlist),
-          virtualSelectInput(inputId = "scaleDDCtMulti", label = "Scale", choices = c("normal", "log")),
-          virtualSelectInput(inputId = "exportFormatDDCtMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
-          numericInput("width_ddCqMulti", label = "Width", value = 800),
-          numericInput("height_ddCqMulti", label = "Height", value = 800),
-          numericInput("scale_ddCqMulti", label = "Scale", value = 3),
-          helpText("set scale to 3 for 300 dpi")
+          helpText("Show Settings"),
+          switchInput(inputId = "show_plot_settings_MultiddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_plot_settings_MultiddCq == true",
+            virtualSelectInput(inputId = "PlotDataDDCtMulti", label = "Plot Data", choices = c("Fold Change", "ddCt")),
+            virtualSelectInput("SamplePickerDDCtMulti", label = "Samples", choices = "", multiple = TRUE),
+            virtualSelectInput("GenePickerDDCtMulti", label = "Genes", choices = "", multiple = TRUE),
+            virtualSelectInput(inputId = "PlotTypeDDCtMulti", label = "Plot Type", choices = c("Bar Chart", "Dot Plot")),
+            checkboxInput("ShowErrorBarDDCtMulti", "Show error bars", FALSE),
+            virtualSelectInput(inputId = "scaleDDCtMulti", label = "Scale", choices = c("normal", "log"))),
+
+          h5("Customize Plot Appearance"),
+          helpText("Show Appearance Settings"),
+          switchInput(inputId = "show_appearance_settings_MultiddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_appearance_settings_MultiddCq == true",
+            virtualSelectInput(inputId = "colorpickerDDCtMulti", label = "Pick Colors", choices = colorlist),
+            h6("Define Sample Order"),
+            helpText("Drag and Drop Samples"),
+            orderInput("x_order_MultiddCq", "", items = NULL, width = "100%"),
+            h6("X Axis Text Angle"),
+            helpText("Rotation angle of x axis labels"),
+            sliderTextInput(inputId = "xTextAngle_MultiddCq", label = "", choices = c(0, 30, 45, 60, 90), grid = TRUE),
+            textInput(inputId = "plotTitle_MultiddCq", label = "Plot Title", value = "", width = NULL, placeholder = NULL),
+            textInput(inputId = "legendTitle_MultiddCq", label = "Legend Title", value = "Genes", width = NULL, placeholder = "Genes"),
+            virtualSelectInput(inputId = "legendPosition_MultiddCq", label = "Legend Position", choices = c("right", "none"))),
+
+          h5("Plot Export"),
+          helpText("Show Plot Export Settings:"),
+          switchInput(inputId = "show_export_settings_MultiddCq",onLabel = "Yes", offLabel = "No"),
+          conditionalPanel(
+            condition = "input.show_export_settings_MultiddCq == true",
+            virtualSelectInput(inputId = "exportFormatDDCtMulti", label = "File Format", choices = c("svg", "png", "jpeg", "webp")),
+            numericInput("width_ddCqMulti", label = "Width", value = 800),
+            numericInput("height_ddCqMulti", label = "Height", value = 800),
+            numericInput("scale_ddCqMulti", label = "Scale", value = 3),
+            helpText("set scale to 6 for 600 dpi"))
         ),
         conditionalPanel(
           condition = "input.tabsMulti=='Statistical Analysis'",

@@ -40,8 +40,10 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
+#library("curl")
 library("viridisLite")
 library("shinyjqui")
+library("ggpubr")
 
 server <- function(input, output, session) {
 
@@ -68,42 +70,6 @@ server <- function(input, output, session) {
               type = "info",
               showCloseButton = TRUE
             )
-
-#    if (!has_internet()) {
-#
-#
-#      show_alert(
-#        title = "Error",
-#        text = "No internet connection available, please try again later.",
-#        type = "warning",
-#        showCloseButton = TRUE
-#      )
-#
-#      return(NULL)
-#
-#    }
-#
-#    else {
-#    runningVersion <- "0.1.7"
-#    url <- ("https://www.uibk.ac.at/media/filer_public/13/98/1398cdf4-4d91-4e79-a83f-053ee594525a/latest_version.txt")
-#    latestVersion <- readLines(url, n=1)
-#    if (runningVersion == latestVersion) {
-#      show_alert(
-#        title = "Alright,",
-#        text = "you're running the latest version!",
-#        type = "success",
-#        showCloseButton = TRUE
-#      )
-#    } else {
-#      show_alert(
-#        title = "Update available!",
-#        text = tags$span("A new (and better) version of qRAT is available.", tags$br(), tags$br(), tags$a(href = "https://fileshare.uibk.ac.at/f/d946d225a03b4ed1ae8c/?dl=1", "Download here")),
-#        html = TRUE,
-#        type = "warning",
-#        showCloseButton = TRUE
-#      )
-#    }
-#    }
   })
 
   # Button Citation
@@ -446,7 +412,7 @@ server <- function(input, output, session) {
     fwrite(xx, file = "fileSingle.csv", sep = sep)
 
     Genes <- unique(xx$Gene)
-    refs <- grep("^(ACT|UBQ|REF|RF).*", Genes, ignore.case = TRUE)
+    refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
     if (length(refs) == 0) {
       refs <- Genes[length(Genes)]
     } else {
@@ -724,7 +690,7 @@ server <- function(input, output, session) {
 
     ## read genes
     Genes <- unique(info2$Gene)
-    refs <- grep("^(ACT|UBQ|REF|RF).*", Genes, ignore.case = TRUE)
+    refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
     if (length(refs) == 0) {
       refs <- Genes[length(Genes)]
     } else {
@@ -927,10 +893,16 @@ server <- function(input, output, session) {
     expr.abs$"-dCq" <- expr.abs$"-dCq" * -1
     SamplesdCt <- unique(as.character(expr.abs$Sample))
     SamplesddCt <- unique(as.character(expr.rel$Sample))
+    GenesdCt <- unique(as.character(expr.abs$Gene))
+    GenesddCt <- unique(as.character(expr.rel$Gene))
 
     # Update Inputfields (Plot Settings and Input Settings)
     updateVirtualSelect("SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
+    updateOrderInput(session, "x_order", items = SamplesdCt)
     updateVirtualSelect("SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
+    updateOrderInput(session, "x_orderDDCt", items = SamplesddCt)
+    updateVirtualSelect("GenePicker", choices = GenesdCt, selected = GenesdCt)
+    updateVirtualSelect("GenePickerDDCt", choices = GenesddCt, selected = GenesddCt)
 
     #prepare ddCt output for statistical analysis
     ddCt_stat <- expr.rel %>% select(Sample, Gene, ddCt)
@@ -999,9 +971,16 @@ server <- function(input, output, session) {
     SamplesdCtMulti <- unique(as.character(expr.abs$Sample))
     SamplesddCtMulti <- unique(as.character(expr.rel$Sample))
 
+    GenesdCtMulti <- unique(as.character(expr.abs$Gene))
+    GenesddCtMulti <- unique(as.character(expr.rel$Gene))
+
     # Update Inputfields (Plot Settings and Input Settings)
     updateVirtualSelect("SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
+    updateOrderInput(session, "x_order_MultidCq", items = SamplesdCtMulti)
     updateVirtualSelect("SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
+    updateOrderInput(session, "x_order_MultiddCq", items = SamplesddCtMulti)
+    updateVirtualSelect("GenePickerMulti", choices = GenesdCtMulti, selected = GenesdCtMulti)
+    updateVirtualSelect("GenePickerDDCtMulti", choices = GenesddCtMulti, selected = GenesddCtMulti)
 
     ## updateRadioButtons(session, 'geneNameRel', choices=targets, selected=targets[1])
     ## updateCheckboxGroupInput(session, 'geneNameAbs', choices=targets, selected=targets)
@@ -1343,7 +1322,10 @@ server <- function(input, output, session) {
     PlotWidth <- input$width_dCq
     PlotHeight <- input$height_dCq
     PlotScale <- input$scale_dCq
-    sampleOrder <- input$dest
+    plotTitle <- input$plotTitle_dCq
+    legendTitle <- input$legendTitle_dCq
+    legendPosition <- input$legendPosition_dCq
+    xTextAngle <- input$xTextAngle_dCq
 
     info <- resultDdct()
     if (is.null(info)) {
@@ -1358,7 +1340,7 @@ server <- function(input, output, session) {
     } else {
       if (PlotDataPick == "-dCq") {
         PlotDataError <- "dCt.sd"
-        PlotDataPick <- "-dCq"
+        PlotDataPick <- "negdCq"
         yTitle <- "-\u0394Cq"
       } else {
         PlotDataError <- "dCt.sd"
@@ -1369,70 +1351,78 @@ server <- function(input, output, session) {
 
     df <- info$absolute %>%
       mutate(Sample = as.character(Sample)) %>%
-      filter(Sample %in% input$SamplePicker)
+      filter(Sample %in% input$SamplePicker) %>%
+      filter(Gene %in% input$GenePicker)
+
+    df <- rename(df, "negdCq" = "-dCq")
 
 
-    # colour brewer; create colour pallette based on user input and number of genes
+    # Convert x-axis variable to factor with desired levels and order
+    df$Sample <- factor(df$Sample, levels = input$x_order)
+
+    # Define color palette based on user input and unique Gene levels
     numberOfGenes <- n_distinct(df$Gene)
     GeneNames <- pull(distinct(df, Gene))
     GeneNames <- droplevels(GeneNames)
 
+
     if (colorPick == "viridis") {
       colourpalette <- viridis(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
     } else {
       colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
 
     }
 
 
-    if (PlotType == "Bar Chart") {
-      figNormal <- plot_ly(df[order(df$Gene), ],
-                           x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
-        layout(barmode = "group", bargroupgap = 0.1)
+  if (PlotType == "Bar Chart") {
+   figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
+              fill = "Gene", color = "Gene", palette = colourpalette,
+              position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                                                                 "<br>Gene:", Gene,
+                                                                 "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                 "<br>Error:", round(.data[[PlotDataError]], 3)))
 
-      if (scalePick == "normal") {
-        fig <- figNormal
-      } else {
-        fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
-      }
 
     } else {
 
-
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
-                                                    ymin = get(PlotDataPick) - get(PlotDataError),
-                                                    ymax = get(PlotDataPick) + get(PlotDataError)))+
-        geom_point(
-          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
-                            "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
-          position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
-        geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_manual(values = colourpalette)+
-       #theme_pubr(base_size=4.76 * .pt)+
-        list(ggplottheme)
-
-
-
-      if (scalePick == "normal") {
-        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
-      } else {
-        fig <- figNormal +
-          scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
-      }
+      figNormal <- ggdotchart(df, x="Sample",y=PlotDataPick,
+                             fill = "Gene", color = "Gene", palette = colourpalette, sorting = "none",
+                             position = position_dodge(0.9), size=3) + aes(text = paste("Sample:", Sample,
+                                                                                        "<br>Gene:", Gene,
+                                                                                        "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                        "<br>Error:", round(.data[[PlotDataError]], 3))) + guides(fill = guide_legend(override.aes = list(color = NULL)))
 
     }
 
+
+    if(input$ShowErrorBar==TRUE){
+                figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                                        ymax = get(PlotDataPick) + get(PlotDataError)),
+                                                                        width=.7, color = "black", position = position_dodge(0.9),
+                                                       show.legend = FALSE)}
+
+    #Additional Plot Settings ggpubr
+    figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
+
+    if (scalePick == "normal") {
+        fig <- ggplotly(figNormal, tooltip = c("text")) %>%
+          style(hoverlabel = list(bgcolor = "white"))
+      } else {
+        fig <- figNormal + yscale("log2", .format = TRUE)
+        fig <- ggplotly(fig, tooltip = c("text")) %>%
+          style(hoverlabel = list(bgcolor = "white"))
+      }
+
+    fig <- fig %>% layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t)
+
+    #Plotly Settings and Plot Export
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = TRUE, displayModeBar = TRUE
-      ) %>%
-      layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
-      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample", categoryorder = "array", categoryarray = sampleOrder), font=t, legend = list(title = list(text = "Genes")))
+        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = FALSE, displayModeBar = TRUE
+      )
 
     fig
   })
@@ -1464,12 +1454,18 @@ server <- function(input, output, session) {
     PlotWidth <- input$width_ddCq
     PlotHeight <- input$height_ddCq
     PlotScale <- input$scale_ddCq
+    plotTitle <- input$plotTitle_ddCq
+    legendTitle <- input$legendTitle_ddCq
+    legendPosition <- input$legendPosition_ddCq
+    xTextAngle <- input$xTextAngle_ddCq
 
     SamplePicker <- input$SamplePickerDDCt
+    GenePicker <- input$GenePickerDDCt
+
     df <- info$relative %>%
         mutate(Sample = as.character(Sample)) %>%
-        filter(Sample %in% c(SamplePicker))
-
+        filter(Sample %in% c(SamplePicker)) %>%
+        filter(Gene %in% c(GenePicker))
 
     # get the correct data for plot depending on user input (FC or ddCT values)
     if (PlotDataPick == "Fold Change") {
@@ -1482,63 +1478,71 @@ server <- function(input, output, session) {
       yTitle <- "\u0394\u0394Cq"
     }
 
-    # colour brewer; create colour pallette based on user input and number of genes
+    # Convert x-axis variable to factor with desired levels and order
+    df$Sample <- factor(df$Sample, levels = input$x_orderDDCt)
+
+    # Define color palette based on user input and unique Gene levels
     numberOfGenes <- n_distinct(df$Gene)
     GeneNames <- pull(distinct(df, Gene))
     GeneNames <- droplevels(GeneNames)
+
     if (colorPick == "viridis") {
       colourpalette <- viridis(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
     } else {
       colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
+
     }
 
-    if (PlotType == "Bar Chart") {
-      figNormal <- plot_ly(df[order(df$Gene), ],
-                           x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
-        layout(barmode = "group", bargroupgap = 0.1)
 
-      if (scalePick == "normal") {
-        fig <- figNormal
-      } else {
-        fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
-      }
+    if (PlotType == "Bar Chart") {
+      figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
+                             fill = "Gene", color = "Gene", palette = colourpalette,
+                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                                                                                "<br>Gene:", Gene,
+                                                                                "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                "<br>Error:", round(.data[[PlotDataError]], 3)))
+
 
     } else {
 
-
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
-                                                    ymin = get(PlotDataPick) - get(PlotDataError),
-                                                    ymax = get(PlotDataPick) + get(PlotDataError)))+
-        geom_point(
-          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
-                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
-          position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
-        geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_manual(values = colourpalette)+
-        #theme_pubr(base_size=4.76 * .pt)+
-        list(ggplottheme)
-
-
-      if (scalePick == "normal") {
-        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
-      } else {
-        fig <- figNormal +
-          scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
-      }
+      figNormal <- ggdotchart(df, x="Sample",y=PlotDataPick,
+                              fill = "Gene", color = "Gene", palette = colourpalette, sorting = "none",
+                              position = position_dodge(0.9), size=3) + aes(text = paste("Sample:", Sample,
+                                                                                         "<br>Gene:", Gene,
+                                                                                         "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                         "<br>Error:", round(.data[[PlotDataError]], 3))) + guides(fill = guide_legend(override.aes = list(color = NULL)))
 
     }
 
+
+    if(input$ShowErrorBar==TRUE){
+      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                 ymax = get(PlotDataPick) + get(PlotDataError)),
+                                             width=.7, color = "black", position = position_dodge(0.9),
+                                             show.legend = FALSE)}
+
+    #Additional Plot Settings ggpubr
+    figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
+
+    if (scalePick == "normal") {
+      fig <- ggplotly(figNormal, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    } else {
+      fig <- figNormal + yscale("log2", .format = TRUE)
+      fig <- ggplotly(fig, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    }
+
+    fig <- fig %>% layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t)
+
+    #Plotly Settings and Plot Export
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = TRUE, displayModeBar = TRUE
-      ) %>%
-      layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
-      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
+        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = FALSE, displayModeBar = TRUE
+      )
 
     fig
   })
@@ -1814,11 +1818,16 @@ server <- function(input, output, session) {
     scalePick <- input$scaleMulti
     formatChoice <- input$exportFormatMulti
     SamplePicker <- input$SamplePickerMulti
+    GenePicker <- input$GenePickerMulti
     PlotDataPick <- input$PlotDataMulti
     PlotType <- input$PlotTypeMulti
     PlotWidth <- input$width_dCqMulti
     PlotHeight <- input$height_dCqMulti
     PlotScale <- input$scale_dCqMulti
+    plotTitle <- input$plotTitle_MultidCq
+    legendTitle <- input$legendTitle_MultidCq
+    legendPosition <- input$legendPosition_MultidCq
+    xTextAngle <- input$xTextAngle_MultidCq
 
 
     # get the correct data for plot depending on user input (RQ or dCT values)
@@ -1843,65 +1852,76 @@ server <- function(input, output, session) {
 
     df <- info$multiAbsolute %>%
       mutate(Sample = as.character(Sample)) %>%
-      filter(Sample %in% c(SamplePicker))
+      filter(Sample %in% c(SamplePicker)) %>%
+      filter(Gene %in% c(GenePicker))
 
-    # colour brewer; create colour pallette based on user input and number of genes
+    df <- rename(df, "negdCq" = "-dCq")
+
+    # Convert x-axis variable to factor with desired levels and order
+    df$Sample <- factor(df$Sample, levels = input$x_order_MultidCq)
+
+    # Define color palette based on user input and unique Gene levels
     numberOfGenes <- n_distinct(df$Gene)
     GeneNames <- pull(distinct(df, Gene))
     GeneNames <- droplevels(GeneNames)
+
+
     if (colorPick == "viridis") {
       colourpalette <- viridis(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
     } else {
       colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
+
     }
 
     if (PlotType == "Bar Chart") {
-      figNormal <- plot_ly(df[order(df$Gene), ],
-                           x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
-        layout(barmode = "group", bargroupgap = 0.1)
+      figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
+                             fill = "Gene", color = "Gene", palette = colourpalette,
+                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                                                                                "<br>Gene:", Gene,
+                                                                                "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                "<br>Error:", round(.data[[PlotDataError]], 3)))
 
-      if (scalePick == "normal") {
-        fig <- figNormal
-      } else {
-        fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
-      }
 
     } else {
 
-
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
-                                                    ymin = get(PlotDataPick) - get(PlotDataError),
-                                                    ymax = get(PlotDataPick) + get(PlotDataError)))+
-        geom_point(
-          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
-                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
-          position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
-        geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_manual(values = colourpalette)+
-        #theme_pubr(base_size=4.76 * .pt)+
-        list(ggplottheme)
-
-
-      if (scalePick == "normal") {
-        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
-      } else {
-        fig <- figNormal +
-          scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
-      }
+      figNormal <- ggdotchart(df, x="Sample",y=PlotDataPick,
+                              fill = "Gene", color = "Gene", palette = colourpalette, sorting = "none",
+                              position = position_dodge(0.9), size=3) + aes(text = paste("Sample:", Sample,
+                                                                                         "<br>Gene:", Gene,
+                                                                                         "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                         "<br>Error:", round(.data[[PlotDataError]], 3))) + guides(fill = guide_legend(override.aes = list(color = NULL)))
 
     }
 
+
+    if(input$ShowErrorBarMulti==TRUE){
+      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                 ymax = get(PlotDataPick) + get(PlotDataError)),
+                                             width=.7, color = "black", position = position_dodge(0.9),
+                                             show.legend = FALSE)}
+
+    #Additional Plot Settings ggpubr
+    figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
+
+    if (scalePick == "normal") {
+      fig <- ggplotly(figNormal, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    } else {
+      fig <- figNormal + yscale("log2", .format = TRUE)
+      fig <- ggplotly(fig, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    }
+
+    fig <- fig %>% layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t)
+
+    #Plotly Settings and Plot Export
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = TRUE, displayModeBar = TRUE
-      ) %>%
-      layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
-      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
+        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = FALSE, displayModeBar = TRUE
+      )
 
     fig
   })
@@ -1929,11 +1949,16 @@ server <- function(input, output, session) {
     scalePick <- input$scaleDDCtMulti
     formatChoice <- input$exportFormatDDCtMulti
     SamplePicker <- input$SamplePickerDDCtMulti
+    GenePicker <- input$GenePickerDDCtMulti
     PlotDataPick <- input$PlotDataDDCtMulti
     PlotType <- input$PlotTypeDDCtMulti
     PlotWidth <- input$width_ddCqMulti
     PlotHeight <- input$height_ddCqMulti
     PlotScale <- input$scale_ddCqMulti
+    plotTitle <- input$plotTitle_MultiddCq
+    legendTitle <- input$legendTitle_MultiddCq
+    legendPosition <- input$legendPosition_MultiddCq
+    xTextAngle <- input$xTextAngle_MultiddCq
 
     # get the correct data for plot depending on user input (FC or ddCT values)
     if (PlotDataPick == "Fold Change") {
@@ -1949,65 +1974,74 @@ server <- function(input, output, session) {
 
     df <- info$multiRelative %>%
       mutate(Sample = as.character(Sample)) %>%
-      filter(Sample %in% c(SamplePicker))
+      filter(Sample %in% c(SamplePicker)) %>%
+      filter(Gene %in% c(GenePicker))
 
-    # colour brewer; create colour pallette based on user input and number of genes
+    # Convert x-axis variable to factor with desired levels and order
+    df$Sample <- factor(df$Sample, levels = input$x_order_MultiddCq)
+
+    # Define color palette based on user input and unique Gene levels
     numberOfGenes <- n_distinct(df$Gene)
     GeneNames <- pull(distinct(df, Gene))
     GeneNames <- droplevels(GeneNames)
+
+
     if (colorPick == "viridis") {
       colourpalette <- viridis(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
     } else {
       colourpalette <- colorRampPalette(brewer.pal(numberOfGenes, colorPick))(numberOfGenes)
-      colourpalette <- setNames(colourpalette, GeneNames)
+      names(colourpalette) <- GeneNames
+
     }
 
     if (PlotType == "Bar Chart") {
-      figNormal <- plot_ly(df[order(df$Gene), ],
-                           x = ~Sample, y = ~ get(PlotDataPick), color = ~Gene, type = "bar", error_y = list(array = ~ get(PlotDataError), color = "#000000"),
-                           colors = colourpalette, marker = list(size = 10, line = list(color = "rgba(0, 0, 0, .8)", width = 2))) %>%
-        layout(barmode = "group", bargroupgap = 0.1)
+      figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
+                             fill = "Gene", color = "Gene", palette = colourpalette,
+                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                                                                                "<br>Gene:", Gene,
+                                                                                "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                "<br>Error:", round(.data[[PlotDataError]], 3)))
 
-      if (scalePick == "normal") {
-        fig <- figNormal
-      } else {
-        fig <- figNormal %>% layout(yaxis = list(type = "log", dtick = 1))
-      }
 
     } else {
 
-
-      figNormal <- ggplot(df[order(df$Gene), ], aes(Sample, get(PlotDataPick),
-                                                    ymin = get(PlotDataPick) - get(PlotDataError),
-                                                    ymax = get(PlotDataPick) + get(PlotDataError)))+
-        geom_point(
-          aes(fill = Gene, text = paste("Cq:", scales::number(get(PlotDataPick), accuracy = 0.01), "<br>",
-                                        "Sd:", scales::number(get(PlotDataError), accuracy = 0.01))),
-          position = position_dodge(0.6), size = 3, color = "black", shape = 21, stroke = 0.25)+
-        geom_errorbar(aes(fill = Gene), width=.7, color = "black", position = position_dodge(0.6))+
-        scale_fill_manual(values = colourpalette)+
-        #theme_pubr(base_size=4.76 * .pt)+
-        list(ggplottheme)
-
-
-      if (scalePick == "normal") {
-        fig <- ggplotly(figNormal, tooltip = c("x", "Gene", "text"))
-      } else {
-        fig <- figNormal +
-          scale_y_log10(labels = scales::comma_format(big.mark = ""))
-        fig <- ggplotly(fig, tooltip = c("x", "Gene", "text"))
-      }
+      figNormal <- ggdotchart(df, x="Sample",y=PlotDataPick,
+                              fill = "Gene", color = "Gene", palette = colourpalette, sorting = "none",
+                              position = position_dodge(0.9), size=3) + aes(text = paste("Sample:", Sample,
+                                                                                         "<br>Gene:", Gene,
+                                                                                         "<br>Value:", round(.data[[PlotDataPick]], 3),
+                                                                                         "<br>Error:", round(.data[[PlotDataError]], 3))) + guides(fill = guide_legend(override.aes = list(color = NULL)))
 
     }
 
+
+    if(input$ShowErrorBarMulti==TRUE){
+      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                 ymax = get(PlotDataPick) + get(PlotDataError)),
+                                             width=.7, color = "black", position = position_dodge(0.9),
+                                             show.legend = FALSE)}
+
+    #Additional Plot Settings ggpubr
+    figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
+
+    if (scalePick == "normal") {
+      fig <- ggplotly(figNormal, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    } else {
+      fig <- figNormal + yscale("log2", .format = TRUE)
+      fig <- ggplotly(fig, tooltip = c("text")) %>%
+        style(hoverlabel = list(bgcolor = "white"))
+    }
+
+    fig <- fig %>% layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t)
+
+    #Plotly Settings and Plot Export
     fig <- fig %>%
       config(
         displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = TRUE, displayModeBar = TRUE
-      ) %>%
-      layout(xaxis = xaxis, yaxis = yaxis, font=t, plot_bgcolor = "transparent", margin = list(t = 100, l = 100)) %>%
-      layout(yaxis = list(title = yTitle), xaxis = list(title = "Sample"), font=t, legend = list(title = list(text = "Genes")))
+        toImageButtonOptions = list(format = formatChoice, scale = PlotScale, width=PlotWidth, height=PlotHeight), scrollZoom = FALSE, displayModeBar = TRUE
+      )
 
     fig
   })
@@ -2288,5 +2322,6 @@ server <- function(input, output, session) {
   output$comparisonBoxesM_ui <- renderUI({
     comparisonBoxesM()
   })
+
 
 }

@@ -14,6 +14,7 @@ xaxis <- list(
   showgrid = FALSE,
   showline = TRUE,
   linewidth = 2,
+  linecolor='black',
   mirror = TRUE,
   ticks = "outside",
   zeroline = FALSE,
@@ -25,6 +26,7 @@ yaxis <- list(
   mirror = TRUE,
   linewidth = 2,
   tickwidth = 2,
+  linecolor='black',
   tickformat = "digits",
   showgrid = FALSE,
   zeroline = FALSE,
@@ -41,7 +43,7 @@ ggplottheme <- theme(axis.text.x=element_text(colour="black", face = "bold", fam
                     axis.ticks = element_line(size = 2, color="black"),
                     axis.ticks.length=unit(.2, "cm"),
                     legend.title=element_text(face = "bold", family = fontfamily, size=5.81 * .pt),
-                    legend.text=element_text(face = "bold", family = fontfamily, size=4.76 * .pt),
+                    legend.text=element_text(face = "bold.italic", family = fontfamily, size=4.76 * .pt),
                     legend.margin = margin(0, 0, 0, 0),
                     legend.spacing.y = unit(0, "mm")
                     )
