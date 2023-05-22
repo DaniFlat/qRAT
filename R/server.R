@@ -1517,7 +1517,7 @@ server <- function(input, output, session) {
     }
 
 
-    if(input$ShowErrorBar==TRUE){
+    if(input$ShowErrorBarDDCt==TRUE){
       figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
                                                  ymax = get(PlotDataPick) + get(PlotDataError)),
                                              width=.7, color = "black", position = position_dodge(0.9),
@@ -2016,7 +2016,7 @@ server <- function(input, output, session) {
     }
 
 
-    if(input$ShowErrorBarMulti==TRUE){
+    if(input$ShowErrorBarDDCtMulti==TRUE){
       figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
                                                  ymax = get(PlotDataPick) + get(PlotDataError)),
                                              width=.7, color = "black", position = position_dodge(0.9),
