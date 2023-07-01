@@ -54,6 +54,7 @@ library(shinyjs)
 library(ggplot2)
 library(shinyWidgets)
 library(ggpubr)
+library(shiny)
 qRAT()
 ```
 
