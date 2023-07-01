@@ -3,24 +3,7 @@
 #' @author Daniel Flatschacher
 ####
 
-####
-# Packages
-####
 
-#' @import shiny
-#' @import ggplot2
-#' @importFrom shinyjs runExample alert
-#' @importFrom DT dataTableOutput renderDataTable JS
-#' @importFrom dplyr last first between summarize
-#' @importFrom magrittr extract
-#' @importFrom methods show
-#' @importFrom methods removeClass
-#' @importFrom tools file_ext
-#' @importFrom HTqPCR normalizeCtData limmaCtData
-#' @importFrom limma makeContrasts
-#' @importFrom plotly renderPlotly ggplotly plotlyOutput
-#' @importFrom shinyWidgets virtualSelectInput
-#' @importFrom shinyjqui orderInput
 
 
 library("shiny")
@@ -29,8 +12,8 @@ library("shinyWidgets")
 library("HTqPCR")
 library("ddCt")
 library("plotly")
-#library("shinyjs")
-#library("ggplot2")
+library("shinyjs")
+library("ggplot2")
 library("scales")
 library("data.table")
 library("DT")
@@ -40,10 +23,10 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
-#library("curl")
 library("viridisLite")
 library("shinyjqui")
 library("ggpubr")
+library("xfun")
 
 server <- function(input, output, session) {
 

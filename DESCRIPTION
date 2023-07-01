@@ -5,33 +5,32 @@ Authors@R:
     person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8221-9695"))
 Description: qRAT is a tool for the relative quantification of real-time quantitative PCR data analysis
-License: MIT + file LICENSE
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.1
+RoxygenNote: 7.2.3
 Imports: 
-    shiny,
     bslib,
-    shinyWidgets,
-    HTqPCR,
+    data.table,
     ddCt,
-    plotly,
-    shinyjs,
+    dplyr,
+    DT,
     ggplot2,
     ggpubr,
-    scales,
-    data.table,
-    DT,
-    dplyr,
-    waiter,
-    tidyr,
-    stringr,
-    magrittr,
-    shinycssloaders,
-    viridisLite,
-    pkgload,
-    shinyjqui,
+    HTqPCR,
     limma,
-    methods
-Suggests:
-    BiocManager
+    magrittr,
+    methods,
+    plotly,
+    scales,
+    shiny,
+    shinycssloaders,
+    shinyjqui,
+    shinyjs,
+    shinyWidgets,
+    stringr,
+    tidyr,
+    viridisLite,
+    waiter,
+    xfun

@@ -3,12 +3,12 @@
 \name{qRAT - qPCR Relative Expression Analysis Tool}
 \alias{qRAT - qPCR Relative Expression Analysis Tool}
 \alias{qRAT}
-\title{Run the shiny application}
+\title{Run the shiny application#}
 \usage{
 qRAT(...)
 }
 \description{
-Run the shiny application
+Run the shiny application#
 
 Main functions for the qRAT Shiny app
 
