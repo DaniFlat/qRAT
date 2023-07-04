@@ -3,7 +3,24 @@
 #' @author Daniel Flatschacher
 ####
 
+####
+# Packages
+####
 
+#' @import shiny
+#' @import ggplot2
+#' @importFrom shinyjs runExample alert
+#' @importFrom DT dataTableOutput renderDataTable JS
+#' @importFrom dplyr last first between summarize
+#' @importFrom magrittr extract
+#' @importFrom methods show
+#' @importFrom methods removeClass
+#' @importFrom tools file_ext
+#' @importFrom HTqPCR normalizeCtData limmaCtData
+#' @importFrom limma makeContrasts
+#' @importFrom plotly renderPlotly ggplotly plotlyOutput
+#' @importFrom shinyWidgets virtualSelectInput
+#' @importFrom shinyjqui orderInput
 
 
 library("shiny")
@@ -12,8 +29,8 @@ library("shinyWidgets")
 library("HTqPCR")
 library("ddCt")
 library("plotly")
-library("shinyjs")
-library("ggplot2")
+#library("shinyjs")
+#library("ggplot2")
 library("scales")
 library("data.table")
 library("DT")
@@ -23,10 +40,10 @@ library("tidyr")
 library("stringr")
 library("magrittr")
 library("shinycssloaders")
+library("xfun")
 library("viridisLite")
 library("shinyjqui")
 library("ggpubr")
-library("xfun")
 
 server <- function(input, output, session) {
 
@@ -1362,7 +1379,7 @@ server <- function(input, output, session) {
   if (PlotType == "Bar Chart") {
    figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
               fill = "Gene", color = "Gene", palette = colourpalette,
-              position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+              position = position_dodge2(0.9, preserve = "single")) + aes(text = paste("Sample:", Sample,
                                                                  "<br>Gene:", Gene,
                                                                  "<br>Value:", round(.data[[PlotDataPick]], 3),
                                                                  "<br>Error:", round(.data[[PlotDataError]], 3)))
@@ -1381,10 +1398,19 @@ server <- function(input, output, session) {
 
 
     if(input$ShowErrorBar==TRUE){
-                figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
-                                                                        ymax = get(PlotDataPick) + get(PlotDataError)),
-                                                                        width=.7, color = "black", position = position_dodge(0.9),
-                                                       show.legend = FALSE)}
+      if(PlotType == "Bar Chart") {
+
+        figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                   ymax = get(PlotDataPick) + get(PlotDataError)),
+                                               width=.7, color = "black", position = position_dodge2(0.9),
+                                               show.legend = FALSE)
+      } else {
+        figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                   ymax = get(PlotDataPick) + get(PlotDataError)),
+                                               width=.7, color = "black", position = position_dodge(0.9),
+                                               show.legend = FALSE)
+          }
+      }
 
     #Additional Plot Settings ggpubr
     figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
@@ -1482,7 +1508,7 @@ server <- function(input, output, session) {
     if (PlotType == "Bar Chart") {
       figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
                              fill = "Gene", color = "Gene", palette = colourpalette,
-                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                             position = position_dodge2(0.9, preserve = "single")) + aes(text = paste("Sample:", Sample,
                                                                                 "<br>Gene:", Gene,
                                                                                 "<br>Value:", round(.data[[PlotDataPick]], 3),
                                                                                 "<br>Error:", round(.data[[PlotDataError]], 3)))
@@ -1501,10 +1527,18 @@ server <- function(input, output, session) {
 
 
     if(input$ShowErrorBarDDCt==TRUE){
-      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+      if (PlotType == "Bar Chart") {
+          figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
                                                  ymax = get(PlotDataPick) + get(PlotDataError)),
-                                             width=.7, color = "black", position = position_dodge(0.9),
-                                             show.legend = FALSE)}
+                                             width=.7, color = "black", position = position_dodge2(0.9),
+                                             show.legend = FALSE)
+      } else {
+        figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                   ymax = get(PlotDataPick) + get(PlotDataError)),
+                                               width=.7, color = "black", position = position_dodge(0.9),
+                                               show.legend = FALSE)
+      }
+    }
 
     #Additional Plot Settings ggpubr
     figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
@@ -1861,7 +1895,7 @@ server <- function(input, output, session) {
     if (PlotType == "Bar Chart") {
       figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
                              fill = "Gene", color = "Gene", palette = colourpalette,
-                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                             position = position_dodge2(0.9, preserve = "single")) + aes(text = paste("Sample:", Sample,
                                                                                 "<br>Gene:", Gene,
                                                                                 "<br>Value:", round(.data[[PlotDataPick]], 3),
                                                                                 "<br>Error:", round(.data[[PlotDataError]], 3)))
@@ -1880,10 +1914,18 @@ server <- function(input, output, session) {
 
 
     if(input$ShowErrorBarMulti==TRUE){
-      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+      if (PlotType == "Bar Chart") {
+          figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
                                                  ymax = get(PlotDataPick) + get(PlotDataError)),
-                                             width=.7, color = "black", position = position_dodge(0.9),
-                                             show.legend = FALSE)}
+                                             width=.7, color = "black", position = position_dodge2(0.9),
+                                             show.legend = FALSE)
+          } else {
+            figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                       ymax = get(PlotDataPick) + get(PlotDataError)),
+                                                   width=.7, color = "black", position = position_dodge(0.9),
+                                                   show.legend = FALSE)
+          }
+    }
 
     #Additional Plot Settings ggpubr
     figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
@@ -1981,7 +2023,7 @@ server <- function(input, output, session) {
     if (PlotType == "Bar Chart") {
       figNormal <- ggbarplot(df, x="Sample",y=PlotDataPick,
                              fill = "Gene", color = "Gene", palette = colourpalette,
-                             position = position_dodge(0.9)) + aes(text = paste("Sample:", Sample,
+                             position = position_dodge2(0.9, preserve = "single")) + aes(text = paste("Sample:", Sample,
                                                                                 "<br>Gene:", Gene,
                                                                                 "<br>Value:", round(.data[[PlotDataPick]], 3),
                                                                                 "<br>Error:", round(.data[[PlotDataError]], 3)))
@@ -2000,10 +2042,18 @@ server <- function(input, output, session) {
 
 
     if(input$ShowErrorBarDDCtMulti==TRUE){
-      figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+      if (PlotType == "Bar Chart") {
+          figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
                                                  ymax = get(PlotDataPick) + get(PlotDataError)),
-                                             width=.7, color = "black", position = position_dodge(0.9),
-                                             show.legend = FALSE)}
+                                             width=.7, color = "black", position = position_dodge2(0.9),
+                                             show.legend = FALSE)
+      } else {
+        figNormal <- figNormal + geom_errorbar(aes(ymin = get(PlotDataPick) - get(PlotDataError),
+                                                   ymax = get(PlotDataPick) + get(PlotDataError)),
+                                               width=.7, color = "black", position = position_dodge(0.9),
+                                               show.legend = FALSE)
+      }
+    }
 
     #Additional Plot Settings ggpubr
     figNormal <- ggpar(figNormal, x.text.angle = xTextAngle, legend = legendPosition, title = plotTitle, legend.title = legendTitle)
