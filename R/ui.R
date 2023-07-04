@@ -55,6 +55,7 @@ ui <- page_navbar(
   title = "qRAT",
   collapsible = TRUE,
   inverse = FALSE,
+  fillable = FALSE,
   tabPanel("Start",
     icon = icon("house"), class = "active",
 
