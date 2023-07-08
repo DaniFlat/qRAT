@@ -4,10 +4,9 @@
 #' @export qRAT
 
 qRAT <- function(...) {
-
   shiny::addResourcePath('www',
-                         system.file('www',
-                                     package = 'qRAT'))
+                         system.file("www",
+                                     package = "qRAT"))
 shinyApp(ui = ui, server = server, ...)
 
 }
