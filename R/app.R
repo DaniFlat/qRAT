@@ -5,7 +5,9 @@
 
 qRAT <- function(...) {
 
-#addResourcePath(prefix = "www", directoryPath = "./www")
+  shiny::addResourcePath('www',
+                         system.file('www',
+                                     package = 'qRAT'))
 shinyApp(ui = ui, server = server, ...)
 
 }

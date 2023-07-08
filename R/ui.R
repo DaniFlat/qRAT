@@ -60,7 +60,7 @@ shinyLinkInText <- function(to, label) {
 # User Interface
 ####
 # Define UI
-ui <- page_navbar(
+ui <- page_navbar(id = "navbar",
 
   # setup of theme
   theme = bs_theme(
