@@ -10,19 +10,11 @@
 library("shiny")
 library("bslib")
 library("shinyWidgets")
-library("HTqPCR")
-library("ddCt")
 library("plotly")
 library("shinyjs")
-library("ggplot2")
 library("scales")
-library("data.table")
 library("DT")
-library("dplyr")
 library("waiter")
-library("tidyr")
-library("stringr")
-library("magrittr")
 library("shinycssloaders")
 library("viridisLite")
 
@@ -35,32 +27,11 @@ options(spinner.color = "#29abe0", spinner.type = "8")
 # color list for plots
 colorlist <- c("Paired", "Spectral", "Blues", "Greens", "Greys", "Oranges", "Purples", "Reds", "BrBG", "PiYG", "PRGn", "PuOr", "RdBu", "RdGy", "RdYlBu", "RdYlGn", "viridis")
 
-#shinyLink functions
-shinyLink <- function(to, label) {
-  tags$a(
-    class = "shiny__link",
-    href = to,
-    label,
-    class = "btn btn-success",
-    role = "button"
-  )
-}
-
-shinyLinkInText <- function(to, label) {
-  tags$a(
-    class = "shiny__link",
-    href = to,
-    label
-  )
-}
-
-
-
 ####
 # User Interface
 ####
 # Define UI
-ui <- page_navbar(id = "navbar",
+ui <- page_navbar(
 
   # setup of theme
   theme = bs_theme(
@@ -174,7 +145,7 @@ ui <- page_navbar(id = "navbar",
     ),
     p(),
     p(),
-    p(class = "text-muted text-center", "Copyright ©2021-2023 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
+    p(class = "text-muted text-center", "Copyright ©2021-2025 Daniel Flatschacher, Department of Microbiology, University of Innsbruck"),
   ),
   tabPanel("Single Plate",
     icon = icon("stop"),

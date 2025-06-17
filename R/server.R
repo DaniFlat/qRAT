@@ -50,13 +50,6 @@ server <- function(input, output, session) {
   # fully shutdown qRAT and R when user session ends
   session$onSessionEnded(stopApp)
 
-  # loading screen to not have the screen flash bright white
-  hostess <- Hostess$new("loader")
-
-  for (i in 1:10) {
-    Sys.sleep(runif(1) / 2)
-    hostess$set(i * 10)
-  }
   waiter_hide()
 
 
