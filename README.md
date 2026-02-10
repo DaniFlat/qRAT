@@ -28,7 +28,14 @@ Ensure you have the latest version of [R](https://cran.r-project.org/) and [RStu
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("HTqPCR", "ddCt", "limma", "ctrlGene"))
+pkgs <- c(
+  "shiny", "shinyjs", "shinyWidgets", "bslib", "bsicons", "waiter",
+  "ggplot2", "plotly", "dplyr", "tidyr", "data.table", "DT", 
+  "ggpubr", "scales", "RColorBrewer", "ctrlGene", "magrittr", "stringr",
+  "HTqPCR", "ddCt", "limma"
+)
+
+BiocManager::install(pkgs)
 ```
 
 ### 2. Install and Run qRAT
