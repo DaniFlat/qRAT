@@ -1,72 +1,66 @@
-# qRAT - qPCR relative expression analysis tool
+# qRAT — qPCR Relative Expression Analysis Tool <img src="www/logo.png" align="right" height="150" />
 
-## What's qRAT?
+[![R-shiny](https://img.shields.io/badge/Shiny-v1.8.0-blue?logo=shiny&logoColor=white)](https://shiny.posit.co/)
+[![BioConductor](https://img.shields.io/badge/BioConductor-v3.18-green)](https://bioconductor.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![DOI](https://img.shields.io/badge/DOI-10.1186/s12859--022--04823--7-blue)](https://doi.org/10.1186/s12859-022-04823-7)
 
-qRAT is a R based standalone desktop application to automate the processing of raw Quantification Cycle (Cq) data files exported from virtually any qPCR instrument using well established and state-of-the-art statistical and graphical techniques. The purpose of this tool is to provide a comprehensive, straightforward, and easy-to-use solution for the relative quantification of RT-qPCR data that requires no programming knowledge or additional software installation.
+**qRAT** is a comprehensive, R-based application designed to bridge the gap between raw qPCR data and publication-ready results. It automates the entire data processing, from data parsing and quality control to statistical validation and visualization, requiring **zero programming knowledge**.
 
-The current implementation allows ΔCq calculation (relative to endogenous control(s)), ΔΔCq calculation (relative to endogenous control(s) and a reference sample) and inter-plate variation correction. Moreover, functionalities for parsing, filtering and visualisation of relative RT-qPCR data are included.
 
-This repository contains the R scripts that are used to create the shiny app.
+---
 
-## How to run qRAT on Windows?
+## 🌐 Web Application
 
-qRAT is distributed as a Windows desktop application with Electron using the RInno Package. The setup can be easily downloaded and installed from the [qRAT Homepage](https://www.uibk.ac.at/microbiology/services/qrat/).
+The easiest way to use qRAT is via the hosted web interface:
+👉 **[Launch qRAT on shinyapps.io](https://qrat.shinyapps.io/qrat/)**
 
-## How to run qRAT on Linux and MacOS?
+---
 
-Users can run the app using R console and RStudio. 
-1. Upgrade to the most recent version of R and Rstudio
-2. Start RStudio and install all the bioconductor packages by entering the following commands in the console
-```
+## 💻 Local Installation (using R)
+
+To run qRAT locally, follow these steps:
+
+### 1. Install Dependencies
+Ensure you have the latest version of [R](https://cran.r-project.org/) and [RStudio](https://posit.co/download/rstudio-desktop/) installed. Open RStudio and run:
+
+```r
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("HTqPCR")
-BiocManager::install("ddCt")
-BiocManager::install("limma")
+BiocManager::install(c("HTqPCR", "ddCt", "limma", "ctrlGene"))
 ```
-3. Install the qRAT package with devtools from github by executing the following commands
-```
-## install.packages('devtools')
-require('devtools')
-install_github('DaniFlat/qRAT')
-```
-4. Load the libraries and start the application with the following commands
-```
-library(HTqPCR)
-library(ddCt)
-library(limma)
+
+### 2. Install and Run qRAT
+
+```r
+if (!require("devtools")) install.packages("devtools")
+devtools::install_github("DaniFlat/qRAT")
+
 library(qRAT)
-library(scales)
-library(data.table)
-library(DT)
-library(dplyr)
-library(waiter)
-library(tidyr)
-library(stringr)
-library(magrittr)
-library(shinycssloaders)
-library(xfun)
-library(viridisLite)
-library(shinyjqui)
-library(plotly)
-library(shinyjs)
-library(ggplot2)
-library(shinyWidgets)
-library(ggpubr)
-library(shiny)
 qRAT()
 ```
 
-## Web Application
+---
 
-qRAT is available as web application on https://qrat.shinyapps.io/qrat/
+## Example Data
 
-## Citation
+Not sure where to start? Download the [Sample Dataset](https://fileshare.uibk.ac.at/f/f13ba887df05437483a2/?dl=1) to explore qRAT's functionalities immediately.
 
-If you use qRAT for any published research, please include the following citation:
+---
 
-Flatschacher, D., Speckbacher, V. & Zeilinger, S. qRAT: an R-based stand-alone application for relative expression analysis of RT-qPCR data. BMC Bioinformatics 23, 286 (2022). https://doi.org/10.1186/s12859-022-04823-7
+## 📝 Citation
 
-## Getting Help
-[qRAT Homepage](https://www.uibk.ac.at/microbiology/services/qrat/)
+If you use qRAT in your research, please cite our paper:
+
+> Flatschacher, D., Speckbacher, V. & Zeilinger, S. **qRAT: an R-based stand-alone application for relative expression analysis of RT-qPCR data.** *BMC Bioinformatics* 23, 286 (2022). [https://doi.org/10.1186/s12859-022-04823-7](https://doi.org/10.1186/s12859-022-04823-7)
+
+---
+
+## 🛠 Support & Documentation
+
+* **Manual:** Detailed instructions are available within the apps "Help" tab.
+* **Homepage:** [Official qRAT Website](https://www.uibk.ac.at/microbiology/services/qrat/)
+* **Issues:** Found a bug? Please open an [Issue on GitHub](https://github.com/DaniFlat/qRAT/issues).
+
+Developed with ❤️ at the University of Innsbruck.
