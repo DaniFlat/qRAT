@@ -7,7 +7,7 @@ read.qPCRtable <- function(fname, na.value = 40, ...) {
   if (missing(fname)) stop("No input fname specified")
   dt.raw <- fread(fname, header = TRUE, ...)
   for (cc in colnames(dt.raw)) {
-    dcc <- dt.raw[, ..cc]
+    dcc <- dt.raw[, cc]
     if (is.character(dcc)) dcc[is.na(dcc)] <- "NA"
     dt.raw[, cc] <- dcc
   }
@@ -106,7 +106,7 @@ read.qPCRtableMulti <- function(fname, na.value = 40, ...) {
   if (missing(fname)) stop("No input fname specified")
   dt.raw <- fread(fname, header = TRUE, ...)
   for (cc in colnames(dt.raw)) {
-    dcc <- dt.raw[, ..cc]
+    dcc <- dt.raw[, cc]
     if (is.character(dcc)) dcc[is.na(dcc)] <- "NA"
     dt.raw[, cc] <- dcc
   }
@@ -267,6 +267,7 @@ calHTqPCR <- function(dt, ref.Gene, comp.strings = NULL, comp.type, adjustMethod
   results$contrast <- vss
   results
 }
+
 
 
 
