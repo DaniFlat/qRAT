@@ -1,128 +1,190 @@
-<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
-  <symbol id="check-circle-fill" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/>
-  </symbol>
-  <symbol id="info-fill" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
-  </symbol>
-  <symbol id="exclamation-triangle-fill" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
-  </symbol>
-</svg>
+<div class="container py-4">
+  <div class="text-center mb-5">
+    <h1 style="color: #325d88; font-weight: 800; letter-spacing: -1px;">Help & Documentation</h1>
+    <p class="text-muted">Everything you need to know about qPCR Relative Expression Analysis with qRAT</p>
+  </div>
 
-<h1>Help and About</h1>
+  <div class="row g-4">
+    <div class="col-md-7">
+      <div class="card h-100 shadow-sm border-0" style="border-radius: 15px; background: #fff;">
+        <div class="card-header bg-light border-0 py-3" style="border-radius: 15px 15px 0 0;">
+          <h5 class="mb-0 text-primary"><i class="fas fa-circle-info me-2"></i>What's qRAT?</h5>
+        </div>
+        <div class="card-body p-4">
+          <p style="line-height: 1.6; color: #5a6b7d;">
+            qRAT is an R-based standalone application designed to automate the processing of raw Quantification Cycle (Cq) data files. 
+            It works with data exported from virtually any qPCR instrument using well-established and state-of-the-art statistical and graphical techniques.
+          </p>
+          <p style="line-height: 1.6; color: #5a6b7d;">
+            The purpose of this tool is to provide a comprehensive, straightforward, and easy-to-use solution for the relative quantification of RT-qPCR data that requires 
+            <strong>no programming knowledge</strong>.
+          </p>
+          <div class="mt-4 p-3 bg-light rounded-3 border-start border-primary border-4">
+            <h6 class="fw-bold mb-1">Amplification Efficiencies</h6>
+            <small class="text-muted">
+              For ∆∆Cq validity, efficiencies of target and reference primers must be approximately equal and close to 1 (100%), as stated by Livak and Schmittgen.
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
 
- <div class="container">
-  <h2>What's qRAT?
-</h2>
-  <p>qRAT is a R based standalone desktop application to automate the processing of raw Quantification Cycle (Cq) data files exported from virtually any qPCR instrument using well established and state-of-the-art statistical and graphical techniques. 
-The purpose of this tool is to provide a comprehensive, straightforward, and easy-to-use solution for the relative quantification of RT-qPCR data that requires 
-no programming knowledge or additional software installation</div> 
+    <div class="col-md-5">
+      <div class="card h-100 shadow-sm border-0" style="border-radius: 15px;">
+        <div class="card-header bg-light border-0 py-3" style="border-radius: 15px 15px 0 0;">
+          <h5 class="mb-0 text-primary"><i class="fas fa-list-check me-2"></i>Quick Checklist</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="list-group list-group-flush">
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3">
+              <i class="fas fa-file-csv text-danger mt-1 me-3"></i>
+              <div>Export Cq values in <b>csv</b> or <b>txt</b> format</div>
+            </div>
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3 bg-light-subtle">
+              <i class="fas fa-heading text-danger mt-1 me-3"></i>
+              <div>The data area must start with the word <b>"Well"</b></div>
+            </div>
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3">
+              <i class="fas fa-columns text-danger mt-1 me-3"></i>
+              <div>Required columns: <b>Well, Sample, Gene, Cq</b></div>
+            </div>
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3 bg-light-subtle">
+              <i class="fas fa-fingerprint text-warning mt-1 me-3"></i>
+              <div>Tech. replicates must have the <b>exact same name</b></div>
+            </div>
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3">
+              <i class="fas fa-clone text-success mt-1 me-3"></i>
+              <div>Inter-Plate Calibrator sample name must be the <b>same on all plates</b></div>
+            </div>
+            <div class="list-group-item d-flex align-items-start border-0 px-4 py-3 bg-light-subtle">
+              <i class="fas fa-font text-info mt-1 me-3"></i>
+              <div>Avoid special characters or spaces in names</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<hr>
- <div class="container">
-  <h2>Citation
-</h2>
-  <p>Please site our publication if you use qRAT in your research:</p>
-	<p>Flatschacher, D., Speckbacher, V. &amp; Zeilinger, S. qRAT: an R-based stand-alone application for relative expression analysis of RT-qPCR data.
-                    <i>BMC Bioinformatics</i> <b>23, </b>286 (2022). https://doi.org/10.1186/s12859-022-04823-7</p>
-	<p>If you use ddCq values, please also cite the paper for <a href="https://doi.org/doi:10.18129/B9.bioc.ddCt">ddCt</a></p>
-	<p>If you use the statistical analysis, please also cite the paper for <a href="https://doi.org/doi:10.18129/B9.bioc.limma">limma</a></p>
-</div> 
-<hr>
+    <div class="col-12">
+      <div class="card shadow-sm border-0" style="border-radius: 15px;">
+        <div class="card-header bg-light border-0 py-3" style="border-radius: 15px 15px 0 0;">
+          <h5 class="mb-0 text-primary"><i class="fas fa-book-open me-2"></i>User Guide</h5>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-info d-flex align-items-center mb-4 border-0" style="border-radius: 10px;">
+            <i class="fas fa-circle-exclamation me-3 fa-lg"></i>
+            <div>
+              Always check the <a href="https://uibk.ac.at/microbiology/services/qrat/" class="alert-link">qRAT Homepage</a> for the latest updates and advanced tutorials.
+            </div>
+          </div>
+          <div class="bg-dark rounded-3 overflow-hidden shadow-inner" style="height: 600px;">
+            <embed
+                src="www/qRAT_User_Guide.pdf#toolbar=0&navpanes=0&scrollbar=0"
+                type="application/pdf"
+                width="100%"
+                height="100%"
+            ></embed>
+          </div>
+        </div>
+      </div>
+    </div>
 
- <div class="container">
-  <h2>Amplification Efficiencies
-</h2>
-  <p>For the validity of ∆∆Cq calculations the amplification efficiencies of all primers for the target and the reference genes have to be approximately equal and close to 1 (100%) as stated by <a href="https://doi.org/10.1006/meth.2001.1262">Livak and Schmittgen</a>.</div> 
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm border-0" style="border-radius: 15px;">
+        <div class="card-header bg-light border-0 py-3">
+          <h5 class="mb-0 text-primary"><i class="fas fa-quote-left me-2"></i>Citation</h5>
+        </div>
+        <div class="card-body p-4">
+          <p class="small text-muted mb-3">Please cite our work if you use qRAT in your research:</p>
+          <div class="p-3 rounded-3 mb-3" style="background: #f8f9fa; border-left: 4px solid #dee2e6;">
+            Flatschacher, D., et al. (2022). <strong>qRAT: an R-based stand-alone application for relative expression analysis.</strong> <i>BMC Bioinformatics</i> 23, 286.
+          </div>
+          <div class="d-grid gap-2 mt-3">
+            <a href="https://doi.org/10.1186/s12859-022-04823-7" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill">View Paper</a>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<h1>Getting Help</h1>
+    <div class="col-md-6">
+      <div class="card h-100 shadow-sm border-0" style="border-radius: 15px;">
+        <div class="card-header bg-light border-0 py-3">
+          <h5 class="mb-0 text-primary"><i class="fas fa-envelope me-2"></i>Contact & Resources</h5>
+        </div>
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center mb-4 p-2 bg-primary-subtle rounded-3 border border-primary-subtle">
+             <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="min-width: 40px; height: 40px;">
+              <i class="fas fa-file-download"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h6 class="mb-0">Example Dataset</h6>
+              <a href="https://fileshare.uibk.ac.at/f/f13ba887df05437483a2/?dl=1" class="small fw-bold text-decoration-none text-primary">Download Sample Files (.zip)</a>
+            </div>
+          </div>
 
- <div class="container">
-  <h2>Quick Checklist
-<small class="text-muted">most important points</small>
-</h2>
-  <div class="list-group">
-<a href="#" class="list-group-item list-group-item-action list-group-item-danger">export Cq values from qPCR machine in csv or txt format</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-danger">first column of columns rows must start by the word "Well"</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-danger">required columns: Well, Sample, Gene, Cq</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-danger">technical replicates of the same biological sample must have the same name</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-warning">number of technical replications must be identical across all samples</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-warning">all samples should have same list of genes</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-info">avoid using space and other special characters in column and sample names</a>
-<a href="#" class="list-group-item list-group-item-action list-group-item-info">Inter-Plate Calibrator sample name must be the same on all plates</a>
-</div>
-</div> 
+          <div class="d-flex align-items-center mb-3">
+            <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+              <i class="fas fa-globe"></i>
+            </div>
+            <div>
+              <h6 class="mb-0">Official Website</h6>
+              <a href="https://www.uibk.ac.at/microbiology/services/qrat" class="small text-decoration-none">uibk.ac.at/qrat</a>
+            </div>
+          </div>
+          <div class="d-flex align-items-center mb-3">
+            <div class="bg-dark text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+              <i class="fab fa-github"></i>
+            </div>
+            <div>
+              <h6 class="mb-0">GitHub Repository</h6>
+              <a href="https://github.com/DaniFlat/qRAT" class="small text-decoration-none">DaniFlat/qRAT</a>
+            </div>
+          </div>
+          <div class="d-flex align-items-center">
+            <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+              <i class="fas fa-user"></i>
+            </div>
+            <div>
+              <h6 class="mb-0">Support Contact</h6>
+              <a href="daniel.flatschacher@uibk.ac.at" class="small text-decoration-none">Daniel Flatschacher @ UIBK</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<hr>
- <div class="container">
-  <h2>Contact Us
-<small class="text-muted">for help and suggestions</small>
-</h2>
-<p>Web: <a href="https://www.uibk.ac.at/microbiology/services/qrat">qRAT Homepage</a></p>
-<p>GitHub: <a href="https://github.com/DaniFlat/qRAT">qRAT GitHub Repository</a></p>
-<p>Mail: <a href="https://www.uibk.ac.at/microbiology/team/daniel_flatschacher/">Daniel Flatschacher @ UIBK</a></p>
-</div> 
-
-
-<hr>
- <div class="container">
-  <h2>Example Data
-</h2>
-  <p><a href="https://fileshare.uibk.ac.at/f/f13ba887df05437483a2/?dl=1">Example dataset (zip)</a></p>
-</div> 
-
-<hr>
-
-<h2>User Guide</h2>
-
-<div class="container">
-
-<p></p>
-<div class="alert alert-primary d-flex align-items-center" role="alert">
-  <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img" aria-label="Info:"><use xlink:href="#info-fill"/></svg>
-  <div>
-    Get the latest User Guide on the <a href="https://uibk.ac.at/microbiology/services/qrat/" class="alert-link">qRAT Homepage</a>
+    <div class="col-12 mb-5">
+      <div class="card border-0 bg-light" style="border-radius: 15px;">
+        <div class="card-body p-4 text-center">
+          <button class="btn btn-link text-muted text-decoration-none small" type="button" data-bs-toggle="collapse" data-bs-target="#collapseLicense">
+            View License Information (MIT)
+          </button>
+          <div class="collapse mt-3" id="collapseLicense">
+            <pre class="bg-white p-3 rounded-3 text-start shadow-sm" style="font-size: 0.75rem; border: 1px solid #dee2e6;">
+MIT License
+Copyright (c) 2022 Daniel Flatschacher
+...
+(Standard MIT License Text)
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-<p></p>
-<embed
-    src="www/qRAT_User_Guide.pdf#toolbar=0&navpanes=0&scrollbar=0"
-    type="application/pdf"
-    frameBorder="0"
-    scrolling="auto"
-    height="500px"
-    width="100%"
-></embed>
-</div>
 
-
-<hr>
-
-<h2>License</h2>
-
-<div class="container">
-
-<pre id="license-text">MIT License
-
-Copyright (c) 2022 Daniel Flatschacher
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-</pre>
-</div>
+<style>
+  /* Extra styling for the help page elements */
+  .list-group-item {
+    transition: background-color 0.2s ease;
+  }
+  .list-group-item:hover {
+    background-color: #f8f9fa !important;
+  }
+  .shadow-inner {
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+  }
+  .bg-primary-subtle {
+    background-color: #e7f1ff !important;
+  }
+</style>

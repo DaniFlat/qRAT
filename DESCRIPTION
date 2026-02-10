@@ -1,36 +1,41 @@
 Package: qRAT
-Title: qPCR relative expression analysis tool
-Version: 0.2.0
-Authors@R: 
-    person("Daniel", "Flatschacher", , "daniel.flatschacher@uibk.ac.at", role = c("aut", "cre"),
-           comment = c(ORCID = "0000-0001-8221-9695"))
-Description: qRAT is a tool for the relative quantification of real-time quantitative PCR data analysis
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Type: Package
+Title: qPCR Relative Expression Analysis Tool
+Version: 0.6.0
+Author: Daniel Flatschacher [aut, cre]
+Maintainer: Daniel Flatschacher <daniel.flatschacher@uibk.ac.at>
+Description: An R-based standalone application to automate the processing of 
+    raw Quantification Cycle (Cq) data files. It provides a comprehensive 
+    solution for relative quantification (delta-delta Cq) including 
+    inter-plate calibration, reference gene stability analysis (geNorm), 
+    and publication-ready visualizations.
+License: MIT + file LICENSE
 Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+LazyData: true
+RoxygenNote: 7.3.3
 Imports: 
-    bslib,
-    data.table,
-    ddCt,
-    dplyr,
-    DT,
-    ggplot2,
-    ggpubr,
-    HTqPCR,
-    limma,
-    magrittr,
-    methods,
-    plotly,
-    scales,
-    shiny,
-    shinycssloaders,
-    shinyjqui,
+    shiny (>= 1.7.0),
     shinyjs,
     shinyWidgets,
-    stringr,
-    tidyr,
-    viridisLite,
+    bslib,
+    bsicons,
     waiter,
-    xfun
+    ggplot2,
+    plotly,
+    dplyr,
+    tidyr,
+    data.table,
+    DT,
+    ggpubr,
+    scales,
+    RColorBrewer,
+    ctrlGene,
+    magrittr,
+    stringr
+Depends: 
+    R (>= 4.0.0),
+    HTqPCR,
+    ddCt,
+    limma
+URL: https://github.com/DaniFlat/qRAT
+BugReports: https://github.com/DaniFlat/qRAT/issues
