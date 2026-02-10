@@ -34,11 +34,7 @@ BiocManager::install(c("HTqPCR", "ddCt", "limma", "ctrlGene"))
 ### 2. Install and Run qRAT
 
 ```r
-if (!require("devtools")) install.packages("devtools")
-devtools::install_github("DaniFlat/qRAT")
-
-library(qRAT)
-qRAT()
+shiny::runGitHub("qRAT", "DaniFlat")
 ```
 
 ---
