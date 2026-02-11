@@ -48,7 +48,7 @@ library("rlang")
 
 server <- function(input, output, session) {
   
- waiter_hide()
+  waiter_hide()
   
   
   check_filetype <- function(failed = FALSE) {
@@ -76,32 +76,36 @@ server <- function(input, output, session) {
   })
   
   
-  observeEvent(readMPData(), {
-    req(readMPData())
+  # Dieser Observer reagiert wenn neue Dateien ausgewählt wurden
+  observeEvent(input$plates, {
+    req(input$plates)
     
-    # Nur ausführen, wenn wir noch nicht validiert haben
-    if (!MP_files_validated()) {
-      ff <- input$plates
-      filelist <- readMPData()$all_raw_list # Wir brauchen Zugriff auf die einzelnen DFs
+    # Wir setzen die Flag zurück
+    MP_files_validated(FALSE)
+    
+    # Wir holen uns die Daten einmalig ohne Abhängigkeit zu anderen Reactives
+    ff <- input$plates
+    sep <- if (input$SepM == "tab") "\t" else if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "auto"
+    
+    for (i in 1:nrow(ff)) {
+      # Wir lesen nur die ersten Zeilen für den Spalten-Check
+      dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
+      c_names <- tolower(names(dt_check))
       
-      for (i in 1:nrow(ff)) {
-        dt <- filelist[[i]]
-        c_names <- tolower(names(dt))
-        
-        MP_validateInputFile(
-          Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-          Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-          Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-          Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-          plateName     = ff$name[i]
-        )
-      }
-      # Jetzt auf TRUE setzen, damit bei Grouping-Änderungen Ruhe ist
-      MP_files_validated(TRUE)
+      MP_validateInputFile(
+        Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+        Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+        Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+        Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+        plateName     = ff$name[i]
+      )
     }
+    
+    # Marker setzen
+    MP_files_validated(TRUE)
   })
   
- 
+  
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
   SP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
@@ -597,7 +601,7 @@ server <- function(input, output, session) {
     ))
   })
   
-
+  
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
@@ -663,7 +667,7 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs)
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
@@ -1029,7 +1033,7 @@ server <- function(input, output, session) {
   })
   
   
-
+  
   
   
   interPlateCalibration <- reactive({
@@ -1287,7 +1291,7 @@ server <- function(input, output, session) {
   })
   
   
-
+  
   
   
   # --- Zentrale qPCR Plot-Funktion ---
@@ -1565,7 +1569,7 @@ server <- function(input, output, session) {
   }) 
   
   
- 
+  
   
   output$ddctRelGraph2 <- renderPlotly({
     d <- prepared_ddCq_data()
@@ -1574,7 +1578,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   
   ## ddCt Expression Data Table Single Plate
   
@@ -1773,7 +1777,7 @@ server <- function(input, output, session) {
   })
   
   
- 
+  
   
   
   
@@ -1835,7 +1839,7 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
- 
+  
   
   ## ddCq Gene Expression Table Multiple Plates
   
@@ -1849,13 +1853,13 @@ server <- function(input, output, session) {
       rename(ddCq = ddCt, ddCq.sd = ddCt.sd)
   })
   
- 
+  
   
   
   
   
   # # --- Multi Plate Analysis: Absolute dCq Plot ---
-
+  
   
   prepared_MultiAbs_data <- reactive({
     info <- resultDdctMulti()
@@ -1916,7 +1920,7 @@ server <- function(input, output, session) {
   
   
   # --- Multi Plate Analysis: Relative ddCq Plot ---
- 
+  
   
   prepared_MultiRel_data <- reactive({
     info <- resultDdctMulti()
@@ -1960,7 +1964,7 @@ server <- function(input, output, session) {
     ))
   })  
   
-
+  
   output$ddctRelGraphMulti <- renderPlotly({
     d <- prepared_MultiRel_data()
     # Nutzt input_type "MultiRel" -> Suffix "DDCtMulti"
@@ -2243,7 +2247,7 @@ server <- function(input, output, session) {
     comparisonBoxesM()
   })
   
-
+  
   
   # --- 5. NAVIGATION & UI-HELPER ---
   
@@ -2255,7 +2259,7 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "tabs", selected = "Multiple Plate Analysis")
   })
   
-
+  
   # Zuerst den Output definieren
   output$fileUploaded <- reactive({
     !is.null(input$dtfile)
@@ -2267,7 +2271,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   
   # --- MANUAL FILTERING LOGIC Single Plate---
   
@@ -2522,7 +2526,7 @@ server <- function(input, output, session) {
   observeEvent(input$open_grouping_modal_multi, {
     
     req(multiData()) 
-  
+    
     removeModal() 
     
     showModal(modalDialog(
@@ -2598,7 +2602,7 @@ server <- function(input, output, session) {
   })
   
   
-
+  
   #Reference Gene Finder
   # 1. Dynamische Auswahl der Reference-Genes Single Plate
   observe({
@@ -2736,7 +2740,7 @@ server <- function(input, output, session) {
     return(res)
   })
   
-
+  
   
   output$ref_stability_plot_multi <- renderPlotly({
     res <- validationResultsMulti()
@@ -2760,7 +2764,7 @@ server <- function(input, output, session) {
     # Tooltip auf unseren custom 'text' im aes() lenken
     ggplotly(p, tooltip = "text")
   })
-
+  
   output$ref_ranking_table_multi <- renderDT({
     res <- validationResultsMulti()
     req(res)
@@ -2786,7 +2790,7 @@ server <- function(input, output, session) {
     
     if (is.null(group_vector)) group_vector <- rep(1, nrow(ct_matrix))
     
-
+    
     genes <- colnames(ct_matrix)
     stability_scores <- sapply(genes, function(g) {
       # Berechne die Abweichung des Gens zum Mittelwert aller anderen Kandidaten
@@ -2813,7 +2817,7 @@ server <- function(input, output, session) {
     return(res)
   }  
   
-
+  
   #Reference Gene Finder Apply Button Single Plate
   observeEvent(input$apply_best_ref, {
     res <- validationResults()
@@ -2925,10 +2929,10 @@ server <- function(input, output, session) {
     )
   })
   
-
   
   
- #Plot Export Download Handler
+  
+  #Plot Export Download Handler
   create_qPCR_downloadHandler <- function(input, data_reactive, type_suffix, col_name, err_name, y_lab) {
     downloadHandler(
       filename = function() {
@@ -3006,7 +3010,7 @@ server <- function(input, output, session) {
     err_name = NULL, 
     y_lab = NULL
   )
-   
   
-      
+  
+  
 }
