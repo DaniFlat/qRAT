@@ -48,8 +48,7 @@ library("rlang")
 
 server <- function(input, output, session) {
   
-  waiter_hide()
-  MP_files_validated <- reactiveVal(FALSE)
+ waiter_hide()
   
   
   check_filetype <- function(failed = FALSE) {
@@ -69,85 +68,103 @@ server <- function(input, output, session) {
   
   
   # Marker, ob die aktuellen Dateien bereits validiert wurden
+  MP_files_validated <- reactiveVal(FALSE)
+  
+  # Sobald neue Dateien ausgewählt werden, setzen wir den Marker zurück
   observeEvent(input$plates, {
-    req(input$plates)
     MP_files_validated(FALSE)
-    
-    ff <- input$plates
-    sep <- if (input$SepM == "tab") "\t" else if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "auto"
-    all_results <- list()
-    
-    for (i in 1:nrow(ff)) {
-      # Wir versuchen die Datei zu lesen. Wenn es scheitert, stürzt die App nicht ab.
-      result <- tryCatch({
-        dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
-        c_names <- tolower(names(dt_check))
-        
-        list(
-          plateName = ff$name[i],
-          is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
-          is_well   = length(intersect(wellColumnList, c_names)) >= 1,
-          is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
-          is_cq     = length(intersect(cqColumnList, c_names)) >= 1,
-          error     = FALSE
-        )
-      }, error = function(e) {
-        # Falls fread komplett scheitert (z.B. falsches Format)
-        list(
-          plateName = ff$name[i],
-          is_sample = FALSE, is_well = FALSE, is_gene = FALSE, is_cq = FALSE,
-          error = TRUE,
-          errorMessage = e$message
-        )
-      })
-      all_results[[i]] <- result
-    }
-    
-    MP_validateAllFiles(all_results)
-    MP_files_validated(TRUE)
   })
   
   
+  observeEvent(readMPData(), {
+    req(readMPData())
+    
+    # Nur ausführen, wenn wir noch nicht validiert haben
+    if (!MP_files_validated()) {
+      ff <- input$plates
+      filelist <- readMPData()$all_raw_list # Wir brauchen Zugriff auf die einzelnen DFs
+      
+      for (i in 1:nrow(ff)) {
+        dt <- filelist[[i]]
+        c_names <- tolower(names(dt))
+        
+        MP_validateInputFile(
+          Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+          Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+          Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+          Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+          plateName     = ff$name[i]
+        )
+      }
+      # Jetzt auf TRUE setzen, damit bei Grouping-Änderungen Ruhe ist
+      MP_files_validated(TRUE)
+    }
+  })
+  
+ 
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
-  MP_validateAllFiles <- function(results) {
-    create_file_box <- function(res) {
-      # Wenn die Datei gar nicht lesbar war
-      if (isTRUE(res$error)) {
-        return(div(
-          style = "margin-bottom: 20px; border: 2px solid #d9534f; border-radius: 8px; overflow: hidden; background: #fff;",
-          div(style = "background: #d9534f; color: white; padding: 10px 15px;", tags$b(res$plateName), " (READ ERROR)"),
-          div(style = "padding: 10px; color: #d9534f;", icon("circle-xmark"), " File could not be read. Please check delimiter or file encoding.")
-        ))
-      }
-      
-      all_clear <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
-      
+  SP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
+    # Zählen, wie viele Checks erfolgreich waren
+    success_count <- sum(c(TRUE, Sample_Column, Well_Column, Gene_Column, Cq_Column))
+    all_clear <- success_count == 5
+    
+    # CSS für die Status-Elemente
+    status_row <- function(label, is_valid, icon_name) {
       div(
-        style = "margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;",
-        div(
-          style = paste0("background: ", if(all_clear) "#325d88" else "#f0ad4e", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
-          tags$b(res$plateName),
-          if(all_clear) icon("circle-check") else icon("triangle-exclamation")
-        ),
-        div(
-          style = "padding: 10px; display: flex; justify-content: space-around; font-size: 0.9em;",
-          div(style = if(res$is_sample) "color:green" else "color:red", icon("vial"), " Sample"),
-          div(style = if(res$is_well) "color:green" else "color:red", icon("border-all"), " Well"),
-          div(style = if(res$is_gene) "color:green" else "color:red", icon("dna"), " Gene"),
-          div(style = if(res$is_cq) "color:green" else "color:red", icon("chart-line"), " Cq")
-        )
+        style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;",
+        div(tags$span(icon(icon_name), style = "margin-right: 10px; color: #555;"), tags$b(label)),
+        if (is_valid) {
+          span(class = "badge bg-success", style = "padding: 8px 12px; border-radius: 20px;", icon("check"), " Found")
+        } else {
+          span(class = "badge bg-danger", style = "padding: 8px 12px; border-radius: 20px;", icon("xmark"), " Missing")
+        }
       )
     }
     
-    showModal(modalDialog(
-      title = tagList(icon("layer-group"), " Multi-Plate Validation Summary"),
+    modalDialog(
+      title = tagList(icon("file-circle-check"), " File Validation Report"),
       size = "m",
-      easyClose = FALSE,
-      div(style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
-          lapply(results, create_file_box)),
-      footer = tagList(modalButton("Confirm & Close", icon = icon("check")))
-    ))
+      easyClose = TRUE,
+      
+      div(
+        style = "padding: 10px;",
+        # Header-Status
+        if (all_clear) {
+          div(class = "alert alert-success", style = "border-radius: 10px; border: none; display: flex; align-items: center;",
+              icon("circle-check", class = "fa-2x", style = "margin-right: 15px;"),
+              div(h5("Perfect!", style = "margin:0; font-weight: bold;"), p("The file structure is valid and ready for analysis.", style = "margin:0;"))
+          )
+        } else {
+          div(class = "alert alert-warning", style = "border-radius: 10px; border: none; display: flex; align-items: center;",
+              icon("triangle-exclamation", class = "fa-2x", style = "margin-right: 15px;"),
+              div(h5("Attention Needed", style = "margin:0; font-weight: bold;"), p("Some required columns could not be identified automatically.", style = "margin:0;"))
+          )
+        },
+        
+        br(),
+        
+        # Status Liste
+        div(
+          style = "background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; overflow: hidden;",
+          status_row("File Format (.csv, .txt)", TRUE, "file-code"),
+          status_row("Sample Column", Sample_Column, "vial"),
+          status_row("Well Column", Well_Column, "border-all"),
+          status_row("Gene / Target Column", Gene_Column, "dna"),
+          status_row("Cq / Ct Column", Cq_Column, "chart-line")
+        ),
+        
+        if (!all_clear) {
+          div(style = "margin-top: 15px; padding: 10px;",
+              p(class = "text-muted small", icon("lightbulb"), " Tip: Ensure your column headers match the typical nomenclature (e.g., 'Sample', 'Well', 'Gene', 'Cq') or check for extra headers at the beginning of the file.")
+          )
+        }
+      ),
+      
+      footer = tagList(
+        modalButton("Dismiss", icon = icon("xmark"))
+      )
+    )
   }
   
   
@@ -488,8 +505,6 @@ server <- function(input, output, session) {
   readMPData <- reactive({
     req(input$plates)
     
-    if (!MP_files_validated()) return(NULL)
-    
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
@@ -582,7 +597,7 @@ server <- function(input, output, session) {
     ))
   })
   
-  
+
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
@@ -648,7 +663,7 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs)
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
@@ -1014,7 +1029,7 @@ server <- function(input, output, session) {
   })
   
   
-  
+
   
   
   interPlateCalibration <- reactive({
@@ -1271,7 +1286,9 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
+  
 
+  
   
   # --- Zentrale qPCR Plot-Funktion ---
   
@@ -1548,7 +1565,7 @@ server <- function(input, output, session) {
   }) 
   
   
-  
+ 
   
   output$ddctRelGraph2 <- renderPlotly({
     d <- prepared_ddCq_data()
@@ -1557,7 +1574,7 @@ server <- function(input, output, session) {
   
   
   
-  
+
   
   ## ddCt Expression Data Table Single Plate
   
@@ -1756,7 +1773,7 @@ server <- function(input, output, session) {
   })
   
   
-  
+ 
   
   
   
@@ -1818,7 +1835,7 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
-  
+ 
   
   ## ddCq Gene Expression Table Multiple Plates
   
@@ -1832,13 +1849,13 @@ server <- function(input, output, session) {
       rename(ddCq = ddCt, ddCq.sd = ddCt.sd)
   })
   
-  
+ 
   
   
   
   
   # # --- Multi Plate Analysis: Absolute dCq Plot ---
-  
+
   
   prepared_MultiAbs_data <- reactive({
     info <- resultDdctMulti()
@@ -1899,7 +1916,7 @@ server <- function(input, output, session) {
   
   
   # --- Multi Plate Analysis: Relative ddCq Plot ---
-  
+ 
   
   prepared_MultiRel_data <- reactive({
     info <- resultDdctMulti()
@@ -1943,7 +1960,7 @@ server <- function(input, output, session) {
     ))
   })  
   
-  
+
   output$ddctRelGraphMulti <- renderPlotly({
     d <- prepared_MultiRel_data()
     # Nutzt input_type "MultiRel" -> Suffix "DDCtMulti"
@@ -2226,7 +2243,7 @@ server <- function(input, output, session) {
     comparisonBoxesM()
   })
   
-  
+
   
   # --- 5. NAVIGATION & UI-HELPER ---
   
@@ -2238,7 +2255,7 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "tabs", selected = "Multiple Plate Analysis")
   })
   
-  
+
   # Zuerst den Output definieren
   output$fileUploaded <- reactive({
     !is.null(input$dtfile)
@@ -2250,7 +2267,7 @@ server <- function(input, output, session) {
   
   
   
-  
+
   
   # --- MANUAL FILTERING LOGIC Single Plate---
   
@@ -2502,10 +2519,10 @@ server <- function(input, output, session) {
   }
   
   # 1. Modal öffnen
-  observeEvent(input$open_grouping_modalMulti, {
+  observeEvent(input$open_grouping_modal_multi, {
     
     req(multiData()) 
-    
+  
     removeModal() 
     
     showModal(modalDialog(
@@ -2581,7 +2598,7 @@ server <- function(input, output, session) {
   })
   
   
-  
+
   #Reference Gene Finder
   # 1. Dynamische Auswahl der Reference-Genes Single Plate
   observe({
@@ -2719,7 +2736,7 @@ server <- function(input, output, session) {
     return(res)
   })
   
-  
+
   
   output$ref_stability_plot_multi <- renderPlotly({
     res <- validationResultsMulti()
@@ -2743,7 +2760,7 @@ server <- function(input, output, session) {
     # Tooltip auf unseren custom 'text' im aes() lenken
     ggplotly(p, tooltip = "text")
   })
-  
+
   output$ref_ranking_table_multi <- renderDT({
     res <- validationResultsMulti()
     req(res)
@@ -2769,7 +2786,7 @@ server <- function(input, output, session) {
     
     if (is.null(group_vector)) group_vector <- rep(1, nrow(ct_matrix))
     
-    
+
     genes <- colnames(ct_matrix)
     stability_scores <- sapply(genes, function(g) {
       # Berechne die Abweichung des Gens zum Mittelwert aller anderen Kandidaten
@@ -2796,7 +2813,7 @@ server <- function(input, output, session) {
     return(res)
   }  
   
-  
+
   #Reference Gene Finder Apply Button Single Plate
   observeEvent(input$apply_best_ref, {
     res <- validationResults()
@@ -2908,10 +2925,10 @@ server <- function(input, output, session) {
     )
   })
   
+
   
   
-  
-  #Plot Export Download Handler
+ #Plot Export Download Handler
   create_qPCR_downloadHandler <- function(input, data_reactive, type_suffix, col_name, err_name, y_lab) {
     downloadHandler(
       filename = function() {
@@ -2989,7 +3006,7 @@ server <- function(input, output, session) {
     err_name = NULL, 
     y_lab = NULL
   )
+   
   
-  
-  
+      
 }
