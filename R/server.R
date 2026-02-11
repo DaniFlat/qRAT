@@ -517,7 +517,7 @@ server <- function(input, output, session) {
       filelist[[i]] <- dt
     }
     
-    # Zusammenfügen mit ID-Spalte "PlateNumber"
+    # Zusammenfügen mit ID-Spalte
     multiplePlates <- data.table::rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
     
     # Spalten mappen
@@ -529,21 +529,30 @@ server <- function(input, output, session) {
         Ct = any_of(cqColumnList)
       )
     
-
     # Replikate-Nummer
     multiplePlates$TempRepNum <- paste(multiplePlates$Sample, multiplePlates$Gene)
     multiplePlates$rp.num <- ave(multiplePlates$Sample, multiplePlates$TempRepNum, FUN = seq_along)
     
-    # Wir wählen die Spalten jetzt explizit aus
-    multiplePlates <- multiplePlates[, .(PlateNumber, Well, Sample, Gene, Ct, rp.num)]
+    # Auswahl der Spalten und Konvertierung in Standard-Dataframe für dplyr/tidyr Kompatibilität
+    multiplePlates <- as.data.frame(multiplePlates)
+    multiplePlates <- multiplePlates[, c("PlateNumber", "Well", "Sample", "Gene", "Ct", "rp.num")]
     
-    # Well-Spalte bereinigen (leere Zeilen entfernen)
-    multiplePlates <- multiplePlates[Well != ""]
+    # Bereinigung
+    multiplePlates <- multiplePlates[multiplePlates$Well != "" & !is.na(multiplePlates$Well), ]
     
     # Cq-Werte bereinigen
     multiplePlates$Ct <- as.numeric(gsub(",", ".", as.character(multiplePlates$Ct)))
     
-    return(multiplePlates)
+    # MultiplePlatesView (für die Plate-Visualisierung)
+    MultiplePlatesView <- multiplePlates %>%
+      separate(Well,
+               into = c("text", "num"),
+               sep = "(?<=[A-Za-z])(?=[0-9])",
+               remove = FALSE
+      )
+    
+    # Rückgabe als Liste
+    return(list(data = multiplePlates, MPV = MultiplePlatesView))
   })
   
   #UI Updates
@@ -562,8 +571,10 @@ server <- function(input, output, session) {
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
-    req(input$plates)
+    req(readMPData())
     info <- readMPData()
+    correctRep <- info$data
+    
     multiplePlates <- info$data
     if (is.null(multiplePlates)) return(NULL)
     
@@ -622,7 +633,7 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs)
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
