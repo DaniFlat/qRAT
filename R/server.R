@@ -66,6 +66,41 @@ server <- function(input, output, session) {
     )
   }
   
+  
+  # Marker, ob die aktuellen Dateien bereits validiert wurden
+  MP_files_validated <- reactiveVal(FALSE)
+  
+  # Sobald neue Dateien ausgewählt werden, setzen wir den Marker zurück
+  observeEvent(input$plates, {
+    MP_files_validated(FALSE)
+  })
+  
+  
+  observeEvent(readMPData(), {
+    req(readMPData())
+    
+    # Nur ausführen, wenn wir noch nicht validiert haben
+    if (!MP_files_validated()) {
+      ff <- input$plates
+      filelist <- readMPData()$all_raw_list # Wir brauchen Zugriff auf die einzelnen DFs
+      
+      for (i in 1:nrow(ff)) {
+        dt <- filelist[[i]]
+        c_names <- tolower(names(dt))
+        
+        MP_validateInputFile(
+          Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+          Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+          Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+          Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+          plateName     = ff$name[i]
+        )
+      }
+      # Jetzt auf TRUE setzen, damit bei Grouping-Änderungen Ruhe ist
+      MP_files_validated(TRUE)
+    }
+  })
+  
  
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
@@ -506,15 +541,15 @@ server <- function(input, output, session) {
       dt <- fread(file_path, header = TRUE, sep = sep, skip = n.header)
       filelist[[i]] <- dt
       
-      # Validierung Trigger
-      c_names <- tolower(names(dt))
-      MP_validateInputFile(
-        Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-        Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-        Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-        Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-        plateName     = current_filename
-      )
+      # # Validierung Trigger
+      # c_names <- tolower(names(dt))
+      # MP_validateInputFile(
+      #   Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+      #   Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+      #   Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+      #   Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+      #   plateName     = current_filename
+      # )
     }
     
     # 3. Datenverarbeitung
@@ -555,8 +590,14 @@ server <- function(input, output, session) {
     MP_NTCs <- sort(unique(as.character(multiplePlates$Sample)))
     updateVirtualSelect("NTC_Input_MP", choices = MP_NTCs)
     
-    return(list(data = multiplePlates, MPV = MultiplePlatesView))
+    return(list(
+      data = multiplePlates, 
+      MPV = MultiplePlatesView, 
+      all_raw_list = filelist
+    ))
   })
+  
+
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
@@ -2479,9 +2520,15 @@ server <- function(input, output, session) {
   
   # 1. Modal öffnen
   observeEvent(input$open_grouping_modal_multi, {
+    
+    req(multiData()) 
+  
+    removeModal() 
+    
     showModal(modalDialog(
       title = "Configure Biological Replicates (Multiple Plates)",
-      size = "l", easyClose = FALSE,
+      size = "l", 
+      easyClose = FALSE,
       footer = tagList(
         modalButton("Cancel"), 
         actionButton("save_grouping_btn_multi", "Apply & Save", class = "btn-success")
