@@ -909,8 +909,6 @@ ui <- page_navbar(
             virtualSelectInput("MockM", "Calibrator (Control)", choices = NULL, placeholder = "Select baseline..."),
             span(class="help-block", "The baseline sample for ddCq."),
             hr(),
-            checkboxInput("groupSamplesMulti_dd", "Group Biological Replicates", FALSE),
-            hr(),
             virtualSelectInput("SamplePickerDDCtMulti", "Filter Samples", choices = "", multiple = TRUE),
             virtualSelectInput("GenePickerDDCtMulti", "Filter Genes", choices = "", multiple = TRUE)
           ),

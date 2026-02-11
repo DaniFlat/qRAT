@@ -1290,9 +1290,7 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
-  
-  
-  
+
   
   # --- Zentrale qPCR Plot-Funktion ---
   
