@@ -49,6 +49,7 @@ library("rlang")
 server <- function(input, output, session) {
   
   waiter_hide()
+  MP_files_validated <- reactiveVal(FALSE)
   
   
   check_filetype <- function(failed = FALSE) {
