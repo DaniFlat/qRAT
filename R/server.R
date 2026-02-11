@@ -70,105 +70,82 @@ server <- function(input, output, session) {
   # Marker, ob die aktuellen Dateien bereits validiert wurden
   MP_files_validated <- reactiveVal(FALSE)
   
-  # Sobald neue Dateien ausgewählt werden, setzen wir den Marker zurück
-  observeEvent(input$plates, {
-    MP_files_validated(FALSE)
-  })
-  
-  
-  # Dieser Observer reagiert wenn neue Dateien ausgewählt wurden
   observeEvent(input$plates, {
     req(input$plates)
-    
-    # Wir setzen die Flag zurück
     MP_files_validated(FALSE)
     
-    # Wir holen uns die Daten einmalig ohne Abhängigkeit zu anderen Reactives
     ff <- input$plates
     sep <- if (input$SepM == "tab") "\t" else if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "auto"
     
+    # Liste zum Sammeln der Ergebnisse für alle Dateien
+    all_results <- list()
+    
     for (i in 1:nrow(ff)) {
-      # Wir lesen nur die ersten Zeilen für den Spalten-Check
       dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
       c_names <- tolower(names(dt_check))
       
-      MP_validateInputFile(
-        Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-        Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-        Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-        Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-        plateName     = ff$name[i]
+      # Ergebnis in Liste speichern
+      all_results[[i]] <- list(
+        plateName = ff$name[i],
+        is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
+        is_well   = length(intersect(wellColumnList, c_names)) >= 1,
+        is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
+        is_cq     = length(intersect(cqColumnList, c_names)) >= 1
       )
     }
     
-    # Marker setzen
+    # NUR EINMALIGES MODAL AUFRUFEN
+    MP_validateAllFiles(all_results)
+    
     MP_files_validated(TRUE)
   })
   
   
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
-  SP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
-    # Zählen, wie viele Checks erfolgreich waren
-    success_count <- sum(c(TRUE, Sample_Column, Well_Column, Gene_Column, Cq_Column))
-    all_clear <- success_count == 5
+  MP_validateAllFiles <- function(results) {
     
-    # CSS für die Status-Elemente
-    status_row <- function(label, is_valid, icon_name) {
+    # Generiere die Status-Box für eine einzelne Datei
+    create_file_box <- function(res) {
+      all_clear <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
+      
       div(
-        style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;",
-        div(tags$span(icon(icon_name), style = "margin-right: 10px; color: #555;"), tags$b(label)),
-        if (is_valid) {
-          span(class = "badge bg-success", style = "padding: 8px 12px; border-radius: 20px;", icon("check"), " Found")
-        } else {
-          span(class = "badge bg-danger", style = "padding: 8px 12px; border-radius: 20px;", icon("xmark"), " Missing")
-        }
+        style = "margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;",
+        # Header mit Dateiname
+        div(
+          style = paste0("background: ", if(all_clear) "#325d88" else "#d9534f", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
+          tags$b(res$plateName),
+          if(all_clear) icon("circle-check") else icon("triangle-exclamation")
+        ),
+        # Status-Icons (kompakt)
+        div(
+          style = "padding: 10px; display: flex; justify-content: space-around; font-size: 0.9em;",
+          div(style = if(res$is_sample) "color:green" else "color:red", icon("vial"), " Sample"),
+          div(style = if(res$is_well) "color:green" else "color:red", icon("border-all"), " Well"),
+          div(style = if(res$is_gene) "color:green" else "color:red", icon("dna"), " Gene"),
+          div(style = if(res$is_cq) "color:green" else "color:red", icon("chart-line"), " Cq")
+        )
       )
     }
     
-    modalDialog(
-      title = tagList(icon("file-circle-check"), " File Validation Report"),
+    showModal(modalDialog(
+      title = tagList(icon("layer-group"), " Multi-Plate Validation Summary"),
       size = "m",
-      easyClose = TRUE,
+      easyClose = FALSE,
       
       div(
-        style = "padding: 10px;",
-        # Header-Status
-        if (all_clear) {
-          div(class = "alert alert-success", style = "border-radius: 10px; border: none; display: flex; align-items: center;",
-              icon("circle-check", class = "fa-2x", style = "margin-right: 15px;"),
-              div(h5("Perfect!", style = "margin:0; font-weight: bold;"), p("The file structure is valid and ready for analysis.", style = "margin:0;"))
-          )
+        style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
+        if (length(results) > 0) {
+          lapply(results, create_file_box)
         } else {
-          div(class = "alert alert-warning", style = "border-radius: 10px; border: none; display: flex; align-items: center;",
-              icon("triangle-exclamation", class = "fa-2x", style = "margin-right: 15px;"),
-              div(h5("Attention Needed", style = "margin:0; font-weight: bold;"), p("Some required columns could not be identified automatically.", style = "margin:0;"))
-          )
-        },
-        
-        br(),
-        
-        # Status Liste
-        div(
-          style = "background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; overflow: hidden;",
-          status_row("File Format (.csv, .txt)", TRUE, "file-code"),
-          status_row("Sample Column", Sample_Column, "vial"),
-          status_row("Well Column", Well_Column, "border-all"),
-          status_row("Gene / Target Column", Gene_Column, "dna"),
-          status_row("Cq / Ct Column", Cq_Column, "chart-line")
-        ),
-        
-        if (!all_clear) {
-          div(style = "margin-top: 15px; padding: 10px;",
-              p(class = "text-muted small", icon("lightbulb"), " Tip: Ensure your column headers match the typical nomenclature (e.g., 'Sample', 'Well', 'Gene', 'Cq') or check for extra headers at the beginning of the file.")
-          )
+          "No files to validate."
         }
       ),
       
       footer = tagList(
-        modalButton("Dismiss", icon = icon("xmark"))
+        modalButton("Confirm & Close", icon = icon("check"))
       )
-    )
+    ))
   }
   
   
