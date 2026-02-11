@@ -2523,7 +2523,7 @@ server <- function(input, output, session) {
   }
   
   # 1. Modal öffnen
-  observeEvent(input$open_grouping_modal_multi, {
+  observeEvent(input$open_grouping_modalMulti, {
     
     req(multiData()) 
     

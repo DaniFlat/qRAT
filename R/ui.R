@@ -804,8 +804,8 @@ ui <- page_navbar(
             checkboxInput("groupSamplesMulti", "Group Biological Replicates", FALSE),
             conditionalPanel(
               condition = "input.groupSamplesMulti == true",
-              actionButton("open_grouping_modal_multi", "Configure Groups", class = "btn-primary btn-sm w-100"),
-              p(class="help-block", "Define groups across all plates.")
+              actionButton("open_grouping_modalMulti", "Configure Groups", class = "btn-primary btn-sm w-100"),
+              p(class="help-block", "Define groups and assign samples.")
             ),
             hr(),
           )),
