@@ -48,7 +48,8 @@ library("rlang")
 
 server <- function(input, output, session) {
   
- waiter_hide()
+  waiter_hide()
+  MP_files_validated <- reactiveVal(FALSE)
   
   
   check_filetype <- function(failed = FALSE) {
@@ -67,41 +68,8 @@ server <- function(input, output, session) {
   }
   
   
-  # Marker, ob die aktuellen Dateien bereits validiert wurden
-  MP_files_validated <- reactiveVal(FALSE)
-  
-  # Sobald neue Dateien ausgewählt werden, setzen wir den Marker zurück
-  observeEvent(input$plates, {
-    MP_files_validated(FALSE)
-  })
   
   
-  observeEvent(readMPData(), {
-    req(readMPData())
-    
-    # Nur ausführen, wenn wir noch nicht validiert haben
-    if (!MP_files_validated()) {
-      ff <- input$plates
-      filelist <- readMPData()$all_raw_list # Wir brauchen Zugriff auf die einzelnen DFs
-      
-      for (i in 1:nrow(ff)) {
-        dt <- filelist[[i]]
-        c_names <- tolower(names(dt))
-        
-        MP_validateInputFile(
-          Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-          Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-          Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-          Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-          plateName     = ff$name[i]
-        )
-      }
-      # Jetzt auf TRUE setzen, damit bei Grouping-Änderungen Ruhe ist
-      MP_files_validated(TRUE)
-    }
-  })
-  
- 
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
   SP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column) {
@@ -170,74 +138,159 @@ server <- function(input, output, session) {
   
   
   
+  # Marker, ob die aktuellen Dateien bereits validiert wurden
+  observeEvent(input$plates, {
+    req(input$plates)
+    MP_files_validated(FALSE)
+    
+    ff <- input$plates
+    sep <- if (input$SepM == "tab") "\t" else if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "auto"
+    all_results <- list()
+    
+    for (i in 1:nrow(ff)) {
+      # Wir versuchen die Datei zu lesen. Wenn es scheitert, stürzt die App nicht ab.
+      result <- tryCatch({
+        dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
+        c_names <- tolower(names(dt_check))
+        
+        list(
+          plateName = ff$name[i],
+          is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
+          is_well   = length(intersect(wellColumnList, c_names)) >= 1,
+          is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
+          is_cq     = length(intersect(cqColumnList, c_names)) >= 1,
+          error     = FALSE
+        )
+      }, error = function(e) {
+        # Falls fread komplett scheitert (z.B. falsches Format)
+        list(
+          plateName = ff$name[i],
+          is_sample = FALSE, is_well = FALSE, is_gene = FALSE, is_cq = FALSE,
+          error = TRUE,
+          errorMessage = e$message
+        )
+      })
+      all_results[[i]] <- result
+    }
+    
+    MP_validateAllFiles(all_results)
+    MP_files_validated(TRUE)
+  })
   
   
-  # --- Hilfsfunktion für den Validierungs-Dialog (Multiple Plates) ---
   
-  MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column, plateName) {
-    
-    # Sicherstellen, dass plateName ein einzelner String ist
-    safePlateName <- if(length(plateName) > 0) as.character(plateName[1]) else "Unknown File"
-    
-    # Konvertierung zu logischen Einzelwerten
-    is_sample <- isTRUE(as.logical(Sample_Column))
-    is_well   <- isTRUE(as.logical(Well_Column))
-    is_gene   <- isTRUE(as.logical(Gene_Column))
-    is_cq     <- isTRUE(as.logical(Cq_Column))
-    
-    all_clear <- all(is_sample, is_well, is_gene, is_cq)
-    
-    status_row <- function(label, is_valid, icon_name) {
+  # --- Hilfsfunktion für den Validierungs-Dialog ---
+  MP_validateAllFiles <- function(results) {
+    create_file_box <- function(res) {
+      # Wenn die Datei gar nicht lesbar war
+      if (isTRUE(res$error)) {
+        return(div(
+          style = "margin-bottom: 20px; border: 2px solid #d9534f; border-radius: 8px; overflow: hidden; background: #fff;",
+          div(style = "background: #d9534f; color: white; padding: 10px 15px;", tags$b(res$plateName), " (READ ERROR)"),
+          div(style = "padding: 10px; color: #d9534f;", icon("circle-xmark"), " File could not be read. Please check delimiter or file encoding.")
+        ))
+      }
+      
+      all_clear <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
+      
       div(
-        style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;",
-        div(tags$span(icon(icon_name), style = "margin-right: 10px; color: #555;"), tags$b(label)),
-        if (is_valid) {
-          span(class = "badge bg-success", style = "padding: 8px 12px; border-radius: 20px;", icon("check"), " Found")
-        } else {
-          span(class = "badge bg-danger", style = "padding: 8px 12px; border-radius: 20px;", icon("xmark"), " Missing")
-        }
+        style = "margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;",
+        div(
+          style = paste0("background: ", if(all_clear) "#325d88" else "#f0ad4e", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
+          tags$b(res$plateName),
+          if(all_clear) icon("circle-check") else icon("triangle-exclamation")
+        ),
+        div(
+          style = "padding: 10px; display: flex; justify-content: space-around; font-size: 0.9em;",
+          div(style = if(res$is_sample) "color:green" else "color:red", icon("vial"), " Sample"),
+          div(style = if(res$is_well) "color:green" else "color:red", icon("border-all"), " Well"),
+          div(style = if(res$is_gene) "color:green" else "color:red", icon("dna"), " Gene"),
+          div(style = if(res$is_cq) "color:green" else "color:red", icon("chart-line"), " Cq")
+        )
       )
     }
     
     showModal(modalDialog(
-      title = tagList(icon("layer-group"), " Multi-Plate Validation"),
+      title = tagList(icon("layer-group"), " Multi-Plate Validation Summary"),
       size = "m",
       easyClose = FALSE,
-      
-      div(
-        style = "padding: 10px;",
-        div(
-          style = "background: #325d88; color: white; padding: 12px 15px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid rgba(0,0,0,0.1);",
-          tags$span(tags$b("Current File:"), style = "margin-right: 10px; opacity: 0.8;"),
-          tags$code(safePlateName, style = "color: #ffca28; font-size: 1.1em; background: transparent; padding: 0;")
-        ),
-        
-        if (all_clear) {
-          div(class = "alert alert-success", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
-              icon("circle-check", style = "margin-right: 15px; font-size: 1.5rem;"),
-              div(tags$b("Validation Successful"), br(), "All required columns were found.")
-          )
-        } else {
-          div(class = "alert alert-danger", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
-              icon("triangle-exclamation", style = "margin-right: 15px; font-size: 1.5rem;"),
-              div(tags$b("Columns Missing!"), br(), "Please check the column headers or delimiter.")
-          )
-        },
-        
-        div(
-          style = "background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; overflow: hidden;",
-          status_row("Sample Column", is_sample, "vial"),
-          status_row("Well Column", is_well, "border-all"),
-          status_row("Gene / Target Column", is_gene, "dna"),
-          status_row("Cq / Ct Column", is_cq, "chart-line")
-        )
-      ),
-      
-      footer = tagList(
-        modalButton("Next / Close", icon = icon("chevron-right"))
-      )
+      div(style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
+          lapply(results, create_file_box)),
+      footer = tagList(modalButton("Confirm & Close", icon = icon("check")))
     ))
   }
+  
+  
+  
+  
+  
+  
+  # # --- Hilfsfunktion für den Validierungs-Dialog (Multiple Plates) ---
+  # 
+  # MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column, plateName) {
+  #   
+  #   # Sicherstellen, dass plateName ein einzelner String ist
+  #   safePlateName <- if(length(plateName) > 0) as.character(plateName[1]) else "Unknown File"
+  #   
+  #   # Konvertierung zu logischen Einzelwerten
+  #   is_sample <- isTRUE(as.logical(Sample_Column))
+  #   is_well   <- isTRUE(as.logical(Well_Column))
+  #   is_gene   <- isTRUE(as.logical(Gene_Column))
+  #   is_cq     <- isTRUE(as.logical(Cq_Column))
+  #   
+  #   all_clear <- all(is_sample, is_well, is_gene, is_cq)
+  #   
+  #   status_row <- function(label, is_valid, icon_name) {
+  #     div(
+  #       style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;",
+  #       div(tags$span(icon(icon_name), style = "margin-right: 10px; color: #555;"), tags$b(label)),
+  #       if (is_valid) {
+  #         span(class = "badge bg-success", style = "padding: 8px 12px; border-radius: 20px;", icon("check"), " Found")
+  #       } else {
+  #         span(class = "badge bg-danger", style = "padding: 8px 12px; border-radius: 20px;", icon("xmark"), " Missing")
+  #       }
+  #     )
+  #   }
+  #   
+  #   showModal(modalDialog(
+  #     title = tagList(icon("layer-group"), " Multi-Plate Validation"),
+  #     size = "m",
+  #     easyClose = FALSE,
+  #     
+  #     div(
+  #       style = "padding: 10px;",
+  #       div(
+  #         style = "background: #325d88; color: white; padding: 12px 15px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid rgba(0,0,0,0.1);",
+  #         tags$span(tags$b("Current File:"), style = "margin-right: 10px; opacity: 0.8;"),
+  #         tags$code(safePlateName, style = "color: #ffca28; font-size: 1.1em; background: transparent; padding: 0;")
+  #       ),
+  #       
+  #       if (all_clear) {
+  #         div(class = "alert alert-success", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
+  #             icon("circle-check", style = "margin-right: 15px; font-size: 1.5rem;"),
+  #             div(tags$b("Validation Successful"), br(), "All required columns were found.")
+  #         )
+  #       } else {
+  #         div(class = "alert alert-danger", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
+  #             icon("triangle-exclamation", style = "margin-right: 15px; font-size: 1.5rem;"),
+  #             div(tags$b("Columns Missing!"), br(), "Please check the column headers or delimiter.")
+  #         )
+  #       },
+  #       
+  #       div(
+  #         style = "background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; overflow: hidden;",
+  #         status_row("Sample Column", is_sample, "vial"),
+  #         status_row("Well Column", is_well, "border-all"),
+  #         status_row("Gene / Target Column", is_gene, "dna"),
+  #         status_row("Cq / Ct Column", is_cq, "chart-line")
+  #       )
+  #     ),
+  #     
+  #     footer = tagList(
+  #       modalButton("Next / Close", icon = icon("chevron-right"))
+  #     )
+  #   ))
+  # }
   
   
   
@@ -322,30 +375,39 @@ server <- function(input, output, session) {
         Ct = any_of(cqColumnList)
       )
     
+    # --- SICHERHEITS-CHECK 1: Spalten vorhanden? ---
+    if (!"Well" %in% names(SP_data)) return(NULL)
     
     ## generate replicate number for dataview
     SP_data$TempRepNum <- paste(SP_data$Sample, SP_data$Gene)
     SP_data$rp.num <- ave(SP_data$Sample, SP_data$TempRepNum, FUN = seq_along)
+    
+    # Sicherstellen, dass nur vorhandene Spalten gewählt werden
     SP_data <- subset(SP_data, select = c(Well, Sample, Gene, Ct, rp.num)) %>%
       filter(Well != "")
     
-    ## replace "," with "." for dataview
-    CorrectCt <- SP_data$Ct
-    CorrectCt <- gsub(",", ".", CorrectCt, ignore.case = TRUE)
-    SP_data$Ct <- as.numeric(CorrectCt)
+    # ## replace "," with "." for dataview
+    # CorrectCt <- SP_data$Ct
+    # CorrectCt <- gsub(",", ".", CorrectCt, ignore.case = TRUE)
+    # SP_data$Ct <- as.numeric(CorrectCt)
+    
+    SP_data$Ct <- as.numeric(gsub(",", ".", as.character(SP_data$Ct)))
     
     # Update Inputfield for NTC Selection with all Samplenames
     NTCs <- unique(as.character(SP_data$Sample))
     updateVirtualSelect("NTC_Input", choices = NTCs)
     
     # raw data for plots (spatial plate view; cq distribution)
-    plateView <- SP_data %>%
-      separate(Well,
-               into = c("text", "num"),
-               sep = "(?<=[A-Za-z])(?=[0-9])"
-      )
+    plateView <- tryCatch({
+      SP_data %>%
+        separate(Well,
+                 into = c("text", "num"),
+                 sep = "(?<=[A-Za-z])(?=[0-9])"
+        )
+    }, error = function(e) { NULL })
     
-    SP_data
+    # Falls der Split fehlschlägt, stoppen wir hier, damit app nicht crasht
+    if (is.null(plateView)) return(NULL)
     
     return(list(data = SP_data, PV = plateView))
   })
@@ -505,6 +567,8 @@ server <- function(input, output, session) {
   readMPData <- reactive({
     req(input$plates)
     
+    if (!MP_files_validated()) return(NULL)
+    
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
     if (input$SepM == "semicolon") sep <- ";"
@@ -541,15 +605,6 @@ server <- function(input, output, session) {
       dt <- fread(file_path, header = TRUE, sep = sep, skip = n.header)
       filelist[[i]] <- dt
       
-      # # Validierung Trigger
-      # c_names <- tolower(names(dt))
-      # MP_validateInputFile(
-      #   Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-      #   Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-      #   Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-      #   Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-      #   plateName     = current_filename
-      # )
     }
     
     # 3. Datenverarbeitung
@@ -564,6 +619,9 @@ server <- function(input, output, session) {
         Ct = any_of(cqColumnList),
         PlateNumber = platenumber
       )
+    
+    # --- SICHERHEITS-CHECK 1: Existiert die Spalte 'Well'? ---
+    if (!"Well" %in% names(multiplePlates)) return(NULL)
     
     # Replikate-Nummer generieren
     multiplePlates$TempRepNum <- paste(multiplePlates$Sample, multiplePlates$Gene)
@@ -580,11 +638,16 @@ server <- function(input, output, session) {
     updateVirtualSelect("PlateSelect", choices = ChosenPlate, selected = ChosenPlate[1])
     
     # Daten für Plate-View vorbereiten
-    MultiplePlatesView <- multiplePlates %>%
-      separate(Well,
-               into = c("text", "num"),
-               sep = "(?<=[A-Za-z])(?=[0-9])"
-      )
+    MultiplePlatesView <- tryCatch({
+      multiplePlates %>%
+        separate(Well,
+                 into = c("text", "num"),
+                 sep = "(?<=[A-Za-z])(?=[0-9])"
+        )
+    }, error = function(e) { NULL }) # Falls Split scheitert, View auf NULL setzen
+    
+    # Falls View NULL ist (wegen falschem Separator), bricht die Funktion hier sicher ab
+    if (is.null(MultiplePlatesView)) return(NULL)
     
     # Update NTC Auswahl
     MP_NTCs <- sort(unique(as.character(multiplePlates$Sample)))
@@ -597,7 +660,7 @@ server <- function(input, output, session) {
     ))
   })
   
-
+  
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
@@ -663,7 +726,7 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs)
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
@@ -1029,7 +1092,7 @@ server <- function(input, output, session) {
   })
   
   
-
+  
   
   
   interPlateCalibration <- reactive({
@@ -1286,9 +1349,7 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
-  
 
-  
   
   # --- Zentrale qPCR Plot-Funktion ---
   
@@ -1565,7 +1626,7 @@ server <- function(input, output, session) {
   }) 
   
   
- 
+  
   
   output$ddctRelGraph2 <- renderPlotly({
     d <- prepared_ddCq_data()
@@ -1574,7 +1635,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   
   ## ddCt Expression Data Table Single Plate
   
@@ -1773,7 +1834,7 @@ server <- function(input, output, session) {
   })
   
   
- 
+  
   
   
   
@@ -1835,7 +1896,7 @@ server <- function(input, output, session) {
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
- 
+  
   
   ## ddCq Gene Expression Table Multiple Plates
   
@@ -1849,13 +1910,13 @@ server <- function(input, output, session) {
       rename(ddCq = ddCt, ddCq.sd = ddCt.sd)
   })
   
- 
+  
   
   
   
   
   # # --- Multi Plate Analysis: Absolute dCq Plot ---
-
+  
   
   prepared_MultiAbs_data <- reactive({
     info <- resultDdctMulti()
@@ -1916,7 +1977,7 @@ server <- function(input, output, session) {
   
   
   # --- Multi Plate Analysis: Relative ddCq Plot ---
- 
+  
   
   prepared_MultiRel_data <- reactive({
     info <- resultDdctMulti()
@@ -1960,7 +2021,7 @@ server <- function(input, output, session) {
     ))
   })  
   
-
+  
   output$ddctRelGraphMulti <- renderPlotly({
     d <- prepared_MultiRel_data()
     # Nutzt input_type "MultiRel" -> Suffix "DDCtMulti"
@@ -2243,7 +2304,7 @@ server <- function(input, output, session) {
     comparisonBoxesM()
   })
   
-
+  
   
   # --- 5. NAVIGATION & UI-HELPER ---
   
@@ -2255,7 +2316,7 @@ server <- function(input, output, session) {
     updateNavbarPage(session, "tabs", selected = "Multiple Plate Analysis")
   })
   
-
+  
   # Zuerst den Output definieren
   output$fileUploaded <- reactive({
     !is.null(input$dtfile)
@@ -2267,7 +2328,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   
   # --- MANUAL FILTERING LOGIC Single Plate---
   
@@ -2519,10 +2580,10 @@ server <- function(input, output, session) {
   }
   
   # 1. Modal öffnen
-  observeEvent(input$open_grouping_modal_multi, {
+  observeEvent(input$open_grouping_modalMulti, {
     
     req(multiData()) 
-  
+    
     removeModal() 
     
     showModal(modalDialog(
@@ -2598,7 +2659,7 @@ server <- function(input, output, session) {
   })
   
   
-
+  
   #Reference Gene Finder
   # 1. Dynamische Auswahl der Reference-Genes Single Plate
   observe({
@@ -2736,7 +2797,7 @@ server <- function(input, output, session) {
     return(res)
   })
   
-
+  
   
   output$ref_stability_plot_multi <- renderPlotly({
     res <- validationResultsMulti()
@@ -2760,7 +2821,7 @@ server <- function(input, output, session) {
     # Tooltip auf unseren custom 'text' im aes() lenken
     ggplotly(p, tooltip = "text")
   })
-
+  
   output$ref_ranking_table_multi <- renderDT({
     res <- validationResultsMulti()
     req(res)
@@ -2786,7 +2847,7 @@ server <- function(input, output, session) {
     
     if (is.null(group_vector)) group_vector <- rep(1, nrow(ct_matrix))
     
-
+    
     genes <- colnames(ct_matrix)
     stability_scores <- sapply(genes, function(g) {
       # Berechne die Abweichung des Gens zum Mittelwert aller anderen Kandidaten
@@ -2813,7 +2874,7 @@ server <- function(input, output, session) {
     return(res)
   }  
   
-
+  
   #Reference Gene Finder Apply Button Single Plate
   observeEvent(input$apply_best_ref, {
     res <- validationResults()
@@ -2925,10 +2986,10 @@ server <- function(input, output, session) {
     )
   })
   
-
   
   
- #Plot Export Download Handler
+  
+  #Plot Export Download Handler
   create_qPCR_downloadHandler <- function(input, data_reactive, type_suffix, col_name, err_name, y_lab) {
     downloadHandler(
       filename = function() {
@@ -3006,7 +3067,7 @@ server <- function(input, output, session) {
     err_name = NULL, 
     y_lab = NULL
   )
-   
   
-      
+  
+  
 }
