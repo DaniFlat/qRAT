@@ -67,34 +67,38 @@ server <- function(input, output, session) {
   }
   
   
-  # Status-Marker für Validierung
+  # Marker, ob die aktuellen Dateien bereits validiert wurden
   MP_files_validated <- reactiveVal(FALSE)
   
-  # Reset, wenn neue Dateien gewählt werden
+  # Sobald neue Dateien ausgewählt werden, setzen wir den Marker zurück
   observeEvent(input$plates, {
     MP_files_validated(FALSE)
   })
   
   
-  observeEvent(input$plates, {
-    req(input$plates)
-    ff <- input$plates
+  observeEvent(readMPData(), {
+    req(readMPData())
     
-    # Wir loopen durch die Dateien NUR für die Validierung
-    for (i in 1:nrow(ff)) {
-      # Wir lesen nur die Kopfzeile, um die Spalten zu prüfen (sehr schnell)
-      dt_check <- data.table::fread(ff$datapath[i], header = TRUE, nrows = 1)
-      c_names <- tolower(names(dt_check))
+    # Nur ausführen, wenn wir noch nicht validiert haben
+    if (!MP_files_validated()) {
+      ff <- input$plates
+      filelist <- readMPData()$all_raw_list # Wir brauchen Zugriff auf die einzelnen DFs
       
-      MP_validateInputFile(
-        Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
-        Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
-        Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
-        Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
-        plateName     = ff$name[i]
-      )
+      for (i in 1:nrow(ff)) {
+        dt <- filelist[[i]]
+        c_names <- tolower(names(dt))
+        
+        MP_validateInputFile(
+          Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+          Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+          Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+          Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+          plateName     = ff$name[i]
+        )
+      }
+      # Jetzt auf TRUE setzen, damit bei Grouping-Änderungen Ruhe ist
+      MP_files_validated(TRUE)
     }
-    MP_files_validated(TRUE)
   })
   
  
@@ -501,80 +505,104 @@ server <- function(input, output, session) {
   readMPData <- reactive({
     req(input$plates)
     
-    sep <- switch(input$SepM, "tab" = "\t", "comma" = ",", "semicolon" = ";", "auto")
+    if (input$SepM == "tab") sep <- "\t"
+    if (input$SepM == "comma") sep <- ","
+    if (input$SepM == "semicolon") sep <- ";"
+    if (input$SepM == "auto") sep <- "auto"
+    
     ff <- input$plates
+    numfiles <- nrow(ff)
     filelist <- list()
     
-    for (i in 1:nrow(ff)) {
+    # 1. Dateityp-Check
+    for (i in 1:numfiles) {
+      ext <- tools::file_ext(ff$name[i])
+      if (!ext %in% c("csv", "txt", "tsv")) {
+        showModal(modalDialog(
+          title = "Invalid File Type",
+          paste("File", ff$name[i], "is not a supported format (.csv, .txt, .tsv)"),
+          easyClose = TRUE
+        ))
+        return(NULL)
+      }
+    }
+    
+    # 2. Dateien einzeln einlesen und validieren
+    for (i in 1:numfiles) {
       file_path <- ff$datapath[i]
+      current_filename <- ff$name[i]
       
       # Header-Erkennung
       file.header <- readLines(con = file_path, n = 100)
       n.header <- grep("^Well", file.header) - 1
       if (length(n.header) == 0) n.header <- 0
       
-      dt <- data.table::fread(file_path, header = TRUE, sep = sep, skip = n.header)
+      # Einlesen
+      dt <- fread(file_path, header = TRUE, sep = sep, skip = n.header)
       filelist[[i]] <- dt
+      
+      # # Validierung Trigger
+      # c_names <- tolower(names(dt))
+      # MP_validateInputFile(
+      #   Sample_Column = length(intersect(sampleColumnList, c_names)) >= 1,
+      #   Well_Column   = length(intersect(wellColumnList, c_names)) >= 1,
+      #   Gene_Column   = length(intersect(geneColumnList, c_names)) >= 1,
+      #   Cq_Column     = length(intersect(cqColumnList, c_names)) >= 1,
+      #   plateName     = current_filename
+      # )
     }
     
-    # Zusammenfügen mit ID-Spalte
-    multiplePlates <- data.table::rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
+    # 3. Datenverarbeitung
+    multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
     
-    # Spalten mappen
     multiplePlates <- multiplePlates %>%
+      rename_with(tolower) %>%
       rename(
         Sample = any_of(sampleColumnList),
         Well = any_of(wellColumnList),
         Gene = any_of(geneColumnList),
-        Ct = any_of(cqColumnList)
+        Ct = any_of(cqColumnList),
+        PlateNumber = platenumber
       )
     
-    # Replikate-Nummer
+    # Replikate-Nummer generieren
     multiplePlates$TempRepNum <- paste(multiplePlates$Sample, multiplePlates$Gene)
     multiplePlates$rp.num <- ave(multiplePlates$Sample, multiplePlates$TempRepNum, FUN = seq_along)
     
-    # Auswahl der Spalten und Konvertierung in Standard-Dataframe für dplyr/tidyr Kompatibilität
-    multiplePlates <- as.data.frame(multiplePlates)
-    multiplePlates <- multiplePlates[, c("PlateNumber", "Well", "Sample", "Gene", "Ct", "rp.num")]
-    
-    # Bereinigung
-    multiplePlates <- multiplePlates[multiplePlates$Well != "" & !is.na(multiplePlates$Well), ]
+    multiplePlates <- subset(multiplePlates, select = c(PlateNumber, Well, Sample, Gene, Ct, rp.num)) %>%
+      filter(Well != "")
     
     # Cq-Werte bereinigen
     multiplePlates$Ct <- as.numeric(gsub(",", ".", as.character(multiplePlates$Ct)))
     
-    # MultiplePlatesView (für die Plate-Visualisierung)
+    # Update der UI-Elemente
+    ChosenPlate <- unique(as.character(multiplePlates$PlateNumber))
+    updateVirtualSelect("PlateSelect", choices = ChosenPlate, selected = ChosenPlate[1])
+    
+    # Daten für Plate-View vorbereiten
     MultiplePlatesView <- multiplePlates %>%
       separate(Well,
                into = c("text", "num"),
-               sep = "(?<=[A-Za-z])(?=[0-9])",
-               remove = FALSE
+               sep = "(?<=[A-Za-z])(?=[0-9])"
       )
     
-    # Rückgabe als Liste
-    return(list(data = multiplePlates, MPV = MultiplePlatesView))
+    # Update NTC Auswahl
+    MP_NTCs <- sort(unique(as.character(multiplePlates$Sample)))
+    updateVirtualSelect("NTC_Input_MP", choices = MP_NTCs)
+    
+    return(list(
+      data = multiplePlates, 
+      MPV = MultiplePlatesView, 
+      all_raw_list = filelist
+    ))
   })
   
-  #UI Updates
-  observeEvent(readMPData(), {
-    req(readMPData())
-    dt <- readMPData()
-    
-    # Plate Selection
-    ChosenPlate <- unique(as.character(dt$PlateNumber))
-    updateVirtualSelect("PlateSelect", choices = ChosenPlate, selected = ChosenPlate[1])
-    
-    # NTC Auswahl
-    MP_NTCs <- sort(unique(as.character(dt$Sample)))
-    updateVirtualSelect("NTC_Input_MP", choices = MP_NTCs)
-  })
+
   
   # --- 4. Haupt-Datenverarbeitung (Multi Plate) ---
   multiData <- reactive({
-    req(readMPData())
+    req(input$plates)
     info <- readMPData()
-    correctRep <- info$data
-    
     multiplePlates <- info$data
     if (is.null(multiplePlates)) return(NULL)
     
@@ -624,8 +652,10 @@ server <- function(input, output, session) {
       new_names <- as.character(correctRep$Sample)
       
       for (g in groups) {
-        if (!is.null(g$name) && !is.null(g$samples)) {
-          new_names[new_names %in% g$samples] <- g$name
+        grp_name <- g$name
+        grp_samples <- g$samples
+        if (!is.null(grp_name) && !is.null(grp_samples)) {
+          new_names[new_names %in% grp_samples] <- grp_name
         }
       }
       correctRep$Sample <- new_names
@@ -633,7 +663,7 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
+    updateVirtualSelect("IPC", choices = SamplesWithIPCs)
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
