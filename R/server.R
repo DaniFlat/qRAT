@@ -517,11 +517,11 @@ server <- function(input, output, session) {
       filelist[[i]] <- dt
     }
     
+    # Zusammenfügen mit ID-Spalte "PlateNumber"
     multiplePlates <- data.table::rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
     
-    # Standard-Spaltennamen erzwingen
+    # Spalten mappen
     multiplePlates <- multiplePlates %>%
-      rename_with(tolower) %>%
       rename(
         Sample = any_of(sampleColumnList),
         Well = any_of(wellColumnList),
@@ -529,13 +529,18 @@ server <- function(input, output, session) {
         Ct = any_of(cqColumnList)
       )
     
+
     # Replikate-Nummer
     multiplePlates$TempRepNum <- paste(multiplePlates$Sample, multiplePlates$Gene)
     multiplePlates$rp.num <- ave(multiplePlates$Sample, multiplePlates$TempRepNum, FUN = seq_along)
     
-    # Bereinigung
-    multiplePlates <- subset(multiplePlates, select = c(PlateNumber, Well, Sample, Gene, Ct, rp.num)) %>%
-      filter(Well != "")
+    # Wir wählen die Spalten jetzt explizit aus
+    multiplePlates <- multiplePlates[, .(PlateNumber, Well, Sample, Gene, Ct, rp.num)]
+    
+    # Well-Spalte bereinigen (leere Zeilen entfernen)
+    multiplePlates <- multiplePlates[Well != ""]
+    
+    # Cq-Werte bereinigen
     multiplePlates$Ct <- as.numeric(gsub(",", ".", as.character(multiplePlates$Ct)))
     
     return(multiplePlates)
