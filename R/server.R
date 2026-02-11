@@ -68,35 +68,41 @@ server <- function(input, output, session) {
   
   
   # Marker, ob die aktuellen Dateien bereits validiert wurden
-  MP_files_validated <- reactiveVal(FALSE)
-  
   observeEvent(input$plates, {
     req(input$plates)
     MP_files_validated(FALSE)
     
     ff <- input$plates
     sep <- if (input$SepM == "tab") "\t" else if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "auto"
-    
-    # Liste zum Sammeln der Ergebnisse für alle Dateien
     all_results <- list()
     
     for (i in 1:nrow(ff)) {
-      dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
-      c_names <- tolower(names(dt_check))
-      
-      # Ergebnis in Liste speichern
-      all_results[[i]] <- list(
-        plateName = ff$name[i],
-        is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
-        is_well   = length(intersect(wellColumnList, c_names)) >= 1,
-        is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
-        is_cq     = length(intersect(cqColumnList, c_names)) >= 1
-      )
+      # Wir versuchen die Datei zu lesen. Wenn es scheitert, stürzt die App nicht ab.
+      result <- tryCatch({
+        dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
+        c_names <- tolower(names(dt_check))
+        
+        list(
+          plateName = ff$name[i],
+          is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
+          is_well   = length(intersect(wellColumnList, c_names)) >= 1,
+          is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
+          is_cq     = length(intersect(cqColumnList, c_names)) >= 1,
+          error     = FALSE
+        )
+      }, error = function(e) {
+        # Falls fread komplett scheitert (z.B. falsches Format)
+        list(
+          plateName = ff$name[i],
+          is_sample = FALSE, is_well = FALSE, is_gene = FALSE, is_cq = FALSE,
+          error = TRUE,
+          errorMessage = e$message
+        )
+      })
+      all_results[[i]] <- result
     }
     
-    # NUR EINMALIGES MODAL AUFRUFEN
     MP_validateAllFiles(all_results)
-    
     MP_files_validated(TRUE)
   })
   
@@ -104,20 +110,25 @@ server <- function(input, output, session) {
   
   # --- Hilfsfunktion für den Validierungs-Dialog ---
   MP_validateAllFiles <- function(results) {
-    
-    # Generiere die Status-Box für eine einzelne Datei
     create_file_box <- function(res) {
+      # Wenn die Datei gar nicht lesbar war
+      if (isTRUE(res$error)) {
+        return(div(
+          style = "margin-bottom: 20px; border: 2px solid #d9534f; border-radius: 8px; overflow: hidden; background: #fff;",
+          div(style = "background: #d9534f; color: white; padding: 10px 15px;", tags$b(res$plateName), " (READ ERROR)"),
+          div(style = "padding: 10px; color: #d9534f;", icon("circle-xmark"), " File could not be read. Please check delimiter or file encoding.")
+        ))
+      }
+      
       all_clear <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
       
       div(
         style = "margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;",
-        # Header mit Dateiname
         div(
-          style = paste0("background: ", if(all_clear) "#325d88" else "#d9534f", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
+          style = paste0("background: ", if(all_clear) "#325d88" else "#f0ad4e", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
           tags$b(res$plateName),
           if(all_clear) icon("circle-check") else icon("triangle-exclamation")
         ),
-        # Status-Icons (kompakt)
         div(
           style = "padding: 10px; display: flex; justify-content: space-around; font-size: 0.9em;",
           div(style = if(res$is_sample) "color:green" else "color:red", icon("vial"), " Sample"),
@@ -132,19 +143,9 @@ server <- function(input, output, session) {
       title = tagList(icon("layer-group"), " Multi-Plate Validation Summary"),
       size = "m",
       easyClose = FALSE,
-      
-      div(
-        style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
-        if (length(results) > 0) {
-          lapply(results, create_file_box)
-        } else {
-          "No files to validate."
-        }
-      ),
-      
-      footer = tagList(
-        modalButton("Confirm & Close", icon = icon("check"))
-      )
+      div(style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
+          lapply(results, create_file_box)),
+      footer = tagList(modalButton("Confirm & Close", icon = icon("check")))
     ))
   }
   
@@ -485,6 +486,8 @@ server <- function(input, output, session) {
   # --- Einlese-Funktion (Multi Plate) ---
   readMPData <- reactive({
     req(input$plates)
+    
+    if (!MP_files_validated()) return(NULL)
     
     if (input$SepM == "tab") sep <- "\t"
     if (input$SepM == "comma") sep <- ","
