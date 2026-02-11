@@ -179,33 +179,54 @@ server <- function(input, output, session) {
   
   
   
-  # --- Hilfsfunktion für den Validierungs-Dialog ---
+  # --- Hilfsfunktion für den Validierungs-Dialog (Multi Plate) ---
   MP_validateAllFiles <- function(results) {
+    
+    # Check ob irgendwo ein Fehler vorliegt für das Gesamt-Banner
+    any_error <- any(sapply(results, function(x) x$error || !all(x$is_sample, x$is_well, x$is_gene, x$is_cq)))
+    
     create_file_box <- function(res) {
       # Wenn die Datei gar nicht lesbar war
       if (isTRUE(res$error)) {
         return(div(
-          style = "margin-bottom: 20px; border: 2px solid #d9534f; border-radius: 8px; overflow: hidden; background: #fff;",
-          div(style = "background: #d9534f; color: white; padding: 10px 15px;", tags$b(res$plateName), " (READ ERROR)"),
-          div(style = "padding: 10px; color: #d9534f;", icon("circle-xmark"), " File could not be read. Please check delimiter or file encoding.")
+          style = "margin-bottom: 15px; border: 2px solid #d9534f; border-radius: 10px; overflow: hidden; background: #fff;",
+          div(style = "background: #d9534f; color: white; padding: 10px 15px; display: flex; justify-content: space-between;", 
+              tags$b(res$plateName), icon("circle-xmark")),
+          div(style = "padding: 15px; color: #d9534f; background: #fff5f5;", 
+              tags$b("Critical Error:"), " This file could not be read at all. Please check if the file is empty, corrupted, or uses a completely different separator.")
         ))
       }
       
-      all_clear <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
+      all_clear_file <- all(res$is_sample, res$is_well, res$is_gene, res$is_cq)
+      
+      # Status Badge Helper für die kompakte Ansicht
+      badge_item <- function(label, is_valid) {
+        span(
+          style = paste0("padding: 4px 10px; border-radius: 15px; font-size: 0.8em; margin-right: 5px; margin-bottom: 5px; display: inline-block; ",
+                         if(is_valid) "background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9;" 
+                         else "background: #ffegee; color: #c62828; border: 1px solid #ffcdd2;"),
+          icon(if(is_valid) "check" else "xmark"), " ", label
+        )
+      }
       
       div(
-        style = "margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff;",
+        style = paste0("margin-bottom: 15px; border: 1px solid ", if(all_clear_file) "#e0e0e0" else "#f0ad4e", "; border-radius: 10px; overflow: hidden; background: #fff; shadow: 0 2px 4px rgba(0,0,0,0.05);"),
+        # Dateiname Header
         div(
-          style = paste0("background: ", if(all_clear) "#325d88" else "#f0ad4e", "; color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;"),
-          tags$b(res$plateName),
-          if(all_clear) icon("circle-check") else icon("triangle-exclamation")
+          style = paste0("padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; ",
+                         if(all_clear_file) "background: #f8f9fa; border-bottom: 1px solid #e0e0e0;" 
+                         else "background: #fff8e1; border-bottom: 1px solid #ffe082;"),
+          tags$b(res$plateName, style = if(!all_clear_file) "color: #856404;" else "color: #333;"),
+          if(all_clear_file) icon("circle-check", style = "color: #28a745;") 
+          else icon("triangle-exclamation", style = "color: #f0ad4e;")
         ),
+        # Badges Bereich
         div(
-          style = "padding: 10px; display: flex; justify-content: space-around; font-size: 0.9em;",
-          div(style = if(res$is_sample) "color:green" else "color:red", icon("vial"), " Sample"),
-          div(style = if(res$is_well) "color:green" else "color:red", icon("border-all"), " Well"),
-          div(style = if(res$is_gene) "color:green" else "color:red", icon("dna"), " Gene"),
-          div(style = if(res$is_cq) "color:green" else "color:red", icon("chart-line"), " Cq")
+          style = "padding: 12px 15px; background: white;",
+          badge_item("Sample", res$is_sample),
+          badge_item("Well", res$is_well),
+          badge_item("Gene", res$is_gene),
+          badge_item("Cq/Ct", res$is_cq)
         )
       )
     }
@@ -214,83 +235,41 @@ server <- function(input, output, session) {
       title = tagList(icon("layer-group"), " Multi-Plate Validation Summary"),
       size = "m",
       easyClose = FALSE,
-      div(style = "max-height: 450px; overflow-y: auto; padding: 10px; background: #f8f9fa; border-radius: 5px;",
-          lapply(results, create_file_box)),
-      footer = tagList(modalButton("Confirm & Close", icon = icon("check")))
+      
+      div(
+        style = "padding: 5px;",
+        # --- Gesamt-Status Banner ---
+        if (!any_error) {
+          div(class = "alert alert-success", style = "border-radius: 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
+              icon("circle-check", class = "fa-2x", style = "margin-right: 15px;"),
+              div(tags$b("All plates valid!", style = "font-size: 1.1em;"), br(), "All required columns were found in all uploaded files."))
+        } else {
+          div(class = "alert alert-warning", style = "border-radius: 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
+              icon("triangle-exclamation", class = "fa-2x", style = "margin-right: 15px;"),
+              div(tags$b("Validation issues detected"), br(), "Some files are missing columns or couldn't be read. Please check the details below."))
+        },
+        
+        # --- Liste der Dateien ---
+        div(style = "max-height: 400px; overflow-y: auto; padding-right: 5px;",
+            lapply(results, create_file_box)),
+        
+        # --- Tipp Bereich (nur wenn Fehler vorhanden) ---
+        if (any_error) {
+          div(style = "margin-top: 10px; padding: 10px; background: #fdfdfe; border-radius: 8px; border: 1px dashed #dee2e6;",
+              p(class = "text-muted small", style = "margin:0;",
+                icon("lightbulb"), " Tip: If all columns are 'Missing', you likely have selected the wrong separator (Comma vs. Semicolon) or the files have extra header lines.")
+          )
+        }
+      ),
+      
+      footer = tagList(
+        modalButton("Confirm & Close", icon = icon("check"))
+      )
     ))
   }
   
   
   
-  
-  
-  
-  # # --- Hilfsfunktion für den Validierungs-Dialog (Multiple Plates) ---
-  # 
-  # MP_validateInputFile <- function(Sample_Column, Well_Column, Gene_Column, Cq_Column, plateName) {
-  #   
-  #   # Sicherstellen, dass plateName ein einzelner String ist
-  #   safePlateName <- if(length(plateName) > 0) as.character(plateName[1]) else "Unknown File"
-  #   
-  #   # Konvertierung zu logischen Einzelwerten
-  #   is_sample <- isTRUE(as.logical(Sample_Column))
-  #   is_well   <- isTRUE(as.logical(Well_Column))
-  #   is_gene   <- isTRUE(as.logical(Gene_Column))
-  #   is_cq     <- isTRUE(as.logical(Cq_Column))
-  #   
-  #   all_clear <- all(is_sample, is_well, is_gene, is_cq)
-  #   
-  #   status_row <- function(label, is_valid, icon_name) {
-  #     div(
-  #       style = "display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;",
-  #       div(tags$span(icon(icon_name), style = "margin-right: 10px; color: #555;"), tags$b(label)),
-  #       if (is_valid) {
-  #         span(class = "badge bg-success", style = "padding: 8px 12px; border-radius: 20px;", icon("check"), " Found")
-  #       } else {
-  #         span(class = "badge bg-danger", style = "padding: 8px 12px; border-radius: 20px;", icon("xmark"), " Missing")
-  #       }
-  #     )
-  #   }
-  #   
-  #   showModal(modalDialog(
-  #     title = tagList(icon("layer-group"), " Multi-Plate Validation"),
-  #     size = "m",
-  #     easyClose = FALSE,
-  #     
-  #     div(
-  #       style = "padding: 10px;",
-  #       div(
-  #         style = "background: #325d88; color: white; padding: 12px 15px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid rgba(0,0,0,0.1);",
-  #         tags$span(tags$b("Current File:"), style = "margin-right: 10px; opacity: 0.8;"),
-  #         tags$code(safePlateName, style = "color: #ffca28; font-size: 1.1em; background: transparent; padding: 0;")
-  #       ),
-  #       
-  #       if (all_clear) {
-  #         div(class = "alert alert-success", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
-  #             icon("circle-check", style = "margin-right: 15px; font-size: 1.5rem;"),
-  #             div(tags$b("Validation Successful"), br(), "All required columns were found.")
-  #         )
-  #       } else {
-  #         div(class = "alert alert-danger", style = "border-radius: 0 0 10px 10px; border: none; display: flex; align-items: center; margin-bottom: 20px;",
-  #             icon("triangle-exclamation", style = "margin-right: 15px; font-size: 1.5rem;"),
-  #             div(tags$b("Columns Missing!"), br(), "Please check the column headers or delimiter.")
-  #         )
-  #       },
-  #       
-  #       div(
-  #         style = "background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef; overflow: hidden;",
-  #         status_row("Sample Column", is_sample, "vial"),
-  #         status_row("Well Column", is_well, "border-all"),
-  #         status_row("Gene / Target Column", is_gene, "dna"),
-  #         status_row("Cq / Ct Column", is_cq, "chart-line")
-  #       )
-  #     ),
-  #     
-  #     footer = tagList(
-  #       modalButton("Next / Close", icon = icon("chevron-right"))
-  #     )
-  #   ))
-  # }
   
   
   
