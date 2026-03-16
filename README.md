@@ -29,7 +29,7 @@ if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
 pkgs <- c(
-  "shiny", "shinyjs", "shinyWidgets", "bslib", "bsicons", "waiter",
+  "shiny", "shinyjs", "shinyWidgets", "shinycssloaders", "shinyjqui", "bslib", "bsicons", "waiter",
   "ggplot2", "plotly", "dplyr", "tidyr", "data.table", "DT", 
   "ggpubr", "scales", "RColorBrewer", "ctrlGene", "magrittr", "stringr",
   "HTqPCR", "ddCt", "limma"
