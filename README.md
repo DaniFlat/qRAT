@@ -1,12 +1,11 @@
-# qRAT — qPCR Relative Expression Analysis Tool <img src="www/logo.png" align="right" height="150" />
+# qRAT — qPCR Relative Expression Analysis Tool <img src="www/logo.svg" align="right" height="150" />
 
-[![R-shiny](https://img.shields.io/badge/Shiny-v1.8.0-blue?logo=shiny&logoColor=white)](https://shiny.posit.co/)
-[![BioConductor](https://img.shields.io/badge/BioConductor-v3.18-green)](https://bioconductor.org/)
+[![R-shiny](https://img.shields.io/badge/Shiny-v1.14.0-blue?logo=shiny&logoColor=white)](https://shiny.posit.co/)
+[![BioConductor](https://img.shields.io/badge/BioConductor-v3.23-green)](https://bioconductor.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DOI](https://img.shields.io/badge/DOI-10.1186/s12859--022--04823--7-blue)](https://doi.org/10.1186/s12859-022-04823-7)
 
 **qRAT** is a comprehensive, R-based application designed to bridge the gap between raw qPCR data and publication-ready results. It automates the entire data processing, from data parsing and quality control to statistical validation and visualization, requiring **zero programming knowledge**.
-
 
 ---
 
@@ -30,8 +29,8 @@ if (!require("BiocManager", quietly = TRUE))
 
 pkgs <- c(
   "shiny", "shinyjs", "shinyWidgets", "shinycssloaders", "shinyjqui", "bslib", "bsicons", "waiter",
-  "ggplot2", "plotly", "dplyr", "tidyr", "data.table", "DT", 
-  "ggpubr", "scales", "RColorBrewer", "ctrlGene", "magrittr", "stringr",
+  "ggplot2", "ggiraph", "svglite", "dplyr", "tidyr", "data.table", "DT", "rlang", "xfun",
+  "ggpubr", "scales", "RColorBrewer", "viridisLite", "ctrlGene", "magrittr", "pkgload",
   "HTqPCR", "ddCt", "limma"
 )
 
@@ -48,7 +47,7 @@ shiny::runGitHub("qRAT", "DaniFlat")
 
 ## Example Data
 
-Not sure where to start? Download the [Sample Dataset](https://fileshare.uibk.ac.at/f/f13ba887df05437483a2/?dl=1) to explore qRAT's functionalities immediately.
+Not sure where to start? Download the [Sample Dataset (.zip)](https://github.com/DaniFlat/qRAT/raw/main/example_data/qRAT_example_data.zip) to explore qRAT's functionalities immediately. The single files and a short description are in the [example_data](example_data) folder.
 
 ---
 
@@ -62,7 +61,7 @@ If you use qRAT in your research, please cite our paper:
 
 ## 🛠 Support & Documentation
 
-* **Manual:** Detailed instructions are available within the apps "Help" tab.
+* **Manual:** The [qRAT User Guide (PDF)](https://github.com/DaniFlat/qRAT/blob/main/www/qRAT_User_Guide.pdf) is also available within the app's "Help" tab.
 * **Homepage:** [Official qRAT Website](https://www.uibk.ac.at/microbiology/services/qrat/)
 * **Issues:** Found a bug? Please open an [Issue on GitHub](https://github.com/DaniFlat/qRAT/issues).
 

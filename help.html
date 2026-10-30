@@ -22,7 +22,7 @@
           <div class="mt-4 p-3 bg-light rounded-3 border-start border-primary border-4">
             <h6 class="fw-bold mb-1">Amplification Efficiencies</h6>
             <small class="text-muted">
-              For ∆∆Cq validity, efficiencies of target and reference primers must be approximately equal and close to 1 (100%), as stated by Livak and Schmittgen.
+              For ∆∆Cq validity, efficiencies of target and reference primers must be approximately equal and close to 100% (amplification factor &asymp; 2), as stated by Livak and Schmittgen.
             </small>
           </div>
         </div>
@@ -58,7 +58,7 @@
             </div>
             <div class="list-group-item d-flex align-items-start border-0 px-4 py-3 bg-light-subtle">
               <i class="fas fa-font text-info mt-1 me-3"></i>
-              <div>Avoid special characters or spaces in names</div>
+              <div>Common column names are recognized (e.g. <b>Sample Name</b>, <b>Target Name</b>, <b>Ct</b>)</div>
             </div>
           </div>
         </div>
@@ -84,6 +84,10 @@
                 width="100%"
                 height="100%"
             ></embed>
+          </div>
+          <!-- fallback: some browsers (e.g. on phones) do not display embedded PDFs -->
+          <div class="mt-2 small">
+            <a href="www/qRAT_User_Guide.pdf" target="_blank" class="text-decoration-none"><i class="fas fa-file-pdf me-1"></i>Open the User Guide (PDF) in a new tab</a>
           </div>
         </div>
       </div>
@@ -118,7 +122,7 @@
             </div>
             <div class="flex-grow-1">
               <h6 class="mb-0">Example Dataset</h6>
-              <a href="https://fileshare.uibk.ac.at/f/f13ba887df05437483a2/?dl=1" class="small fw-bold text-decoration-none text-primary">Download Sample Files (.zip)</a>
+              <a href="https://github.com/DaniFlat/qRAT/raw/main/example_data/qRAT_example_data.zip" class="small fw-bold text-decoration-none text-primary">Download Sample Files (.zip)</a>
             </div>
           </div>
 
@@ -146,7 +150,7 @@
             </div>
             <div>
               <h6 class="mb-0">Support Contact</h6>
-              <a href="daniel.flatschacher@uibk.ac.at" class="small text-decoration-none">Daniel Flatschacher @ UIBK</a>
+              <a href="mailto:daniel.flatschacher@uibk.ac.at" class="small text-decoration-none">Daniel Flatschacher @ UIBK</a>
             </div>
           </div>
         </div>
@@ -162,9 +166,26 @@
           <div class="collapse mt-3" id="collapseLicense">
             <pre class="bg-white p-3 rounded-3 text-start shadow-sm" style="font-size: 0.75rem; border: 1px solid #dee2e6;">
 MIT License
-Copyright (c) 2022 Daniel Flatschacher
-...
-(Standard MIT License Text)
+
+Copyright (c) 2023 Daniel Flatschacher
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
             </pre>
           </div>
         </div>

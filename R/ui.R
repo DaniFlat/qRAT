@@ -5,7 +5,7 @@
 library("shiny")
 library("bslib")
 library("shinyWidgets")
-library("plotly")
+library("ggiraph")
 library("shinyjs")
 library("scales")
 library("DT")
@@ -29,6 +29,102 @@ options(spinner.color = primary_col, spinner.type = "8")
 colorlist <- c("Paired", "Spectral", "Blues", "Greens", "Greys", "Oranges", "Purples", "Reds", "BrBG", "PiYG", "PRGn", "PuOr", "RdBu", "RdYlBu", "RdYlGn", "viridis")
 
 
+####
+# Bar below the Plate View: wells clicked in the heatmap are applied as manual exclusions.
+####
+plate_selection_bar <- function(button_id, note = NULL) {
+  div(
+    class = "d-flex flex-wrap align-items-center gap-2 mt-2",
+    actionButton(button_id, "Exclude selected wells", icon = icon("ban"), class = "btn-outline-danger btn-sm"),
+    span(class = "text-muted small",
+         "Click wells to select them (outlined). Applying switches to Manual Filtering; an empty selection removes the exclusions.",
+         note)
+  )
+}
+
+
+####
+# Sidebar settings of the four plot tabs (dCq/ddCq, Single/Multi Plate) as an accordion.
+# Replaces the former "Appearance"/"Export Opt." switches; all input IDs are unchanged.
+#   sfx:            suffix of the plot inputs ("", "DDCt", "Multi", "DDCtMulti")
+#   exp:            suffix of the export inputs ("dCq", "ddCq", "Multi", "DDCtMulti")
+#   download_id:    ID of the download button
+#   data_choices:   choices for the data type (RQ/dCq or Fold Change/ddCt)
+#   format_choices: export formats (first entry is the default)
+#   calibrator:     optional calibrator input (ddCq tabs only)
+####
+plot_settings_sidebar <- function(sfx, exp, download_id, data_choices, format_choices, calibrator = NULL) {
+  accordion(
+    multiple = TRUE,
+    open = c("Data Selection", "Data Visualization"),
+    class = "mb-3",
+    accordion_panel(
+      "Data Selection", icon = bsicons::bs_icon("funnel"),
+      calibrator,
+      virtualSelectInput(paste0("SamplePicker", sfx), "Filter Samples", choices = NULL, multiple = TRUE, search = TRUE),
+      virtualSelectInput(paste0("GenePicker", sfx), "Filter Genes", choices = NULL, multiple = TRUE, search = TRUE)
+    ),
+    accordion_panel(
+      "Data Visualization", icon = bsicons::bs_icon("bar-chart"),
+      layout_column_wrap(
+        width = 1/2,
+        virtualSelectInput(paste0("PlotData", sfx), "Data Type", choices = data_choices),
+        virtualSelectInput(paste0("PlotType", sfx), "Plot Type", choices = c("Bar Chart", "Dot Plot"))
+      ),
+      layout_column_wrap(
+        width = 1/2,
+        virtualSelectInput(paste0("scale", sfx), "Y-Axis", choices = c("normal", "log10", "log2")),
+        virtualSelectInput(paste0("error_type", sfx), "Error Type", choices = c("SD" = "sd", "SEM" = "sem"))
+      ),
+      layout_column_wrap(
+        width = 1/2,
+        checkboxInput(paste0("ShowErrorBar", sfx), "Error Bars", FALSE),
+        checkboxInput(paste0("show_ref_line", sfx), "Ref. Line", FALSE)
+      ),
+      layout_column_wrap(
+        width = 1/2,
+        checkboxInput(paste0("show_significance", sfx), "Significance (*)", FALSE),
+        checkboxInput(paste0("facet_by_gene", sfx), "Facet by Gene", FALSE)
+      )
+    ),
+    accordion_panel(
+      "Plot Appearance", icon = bsicons::bs_icon("palette"),
+      textInput(paste0("plotTitle", sfx), "Plot Title"),
+      layout_column_wrap(
+        width = 1/2,
+        textInput(paste0("xlab_custom", sfx), "X-Axis Label"),
+        textInput(paste0("ylab_custom", sfx), "Y-Axis Label")
+      ),
+      virtualSelectInput(paste0("colorpicker", sfx), "Color Palette", choices = colorlist),
+      layout_column_wrap(
+        width = 1/2,
+        sliderInput(paste0("axis_text_size", sfx), "Font Size", min = 6, max = 20, value = 12),
+        sliderInput(paste0("xTextAngle", sfx), "X-Angle", min = 0, max = 90, value = 0)
+      ),
+      layout_column_wrap(
+        width = 1/2,
+        textInput(paste0("legendTitle", sfx), "Legend Title"),
+        virtualSelectInput(paste0("legendPosition", sfx), "Position", choices = c("right", "none"))
+      ),
+      orderInput(paste0("x_order", sfx), "Sample Ordering", items = NULL, width = "100%"),
+      span(class = "help-block", "Drag and drop to reorder.")
+    ),
+    accordion_panel(
+      "Export", icon = bsicons::bs_icon("download"),
+      layout_column_wrap(
+        width = 1/2,
+        numericInput(paste0("plot_w_", exp), "Width (in)", value = 7),
+        numericInput(paste0("plot_h_", exp), "Height (in)", value = 5)
+      ),
+      layout_column_wrap(
+        width = 1/2,
+        virtualSelectInput(paste0("plot_format_", exp), "Format", choices = format_choices),
+        numericInput(paste0("plot_res_", exp), "Scale", value = 3)
+      ),
+      downloadButton(download_id, "Download Plot", class = "btn-primary w-100")
+    )
+  )
+}
 
 ####
 # User Interface
@@ -45,12 +141,15 @@ ui <- page_navbar(
     success = success_col,
     warning = warning_col,
     info = info_col,
-    base_font = font_google("Inter"),
+    # Inter is served from www/fonts/inter (see header); no download from Google at startup
+    base_font = font_collection("Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
     "navbar-bg" = primary_col,
     "body-bg" = page_bg_col
   ),
   
   header = tagList(
+    # self-hosted Inter font (SIL Open Font License, see www/fonts/inter/OFL.txt)
+    tags$link(rel = "stylesheet", href = "www/fonts/inter/font.css"),
     useWaiter(),
     waiterShowOnLoad(
       html = tagList(
@@ -79,13 +178,15 @@ ui <- page_navbar(
         border-radius: 12px; 
         box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
         border: 1px solid #dee2e6; 
-        background-color: ", card_bg_col, " !important; 
-        height: auto !important; 
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background-color: ", card_bg_col, " !important;
+        transition: box-shadow 0.2s ease;
       }
-      
+
+      /* auto height only outside full-screen mode (full screen needs the card to fill the viewport) */
+      .card:not([data-full-screen='true']) { height: auto !important; }
+
+      /* no translate on hover: it shifted plots under the cursor and breaks full-screen positioning */
       .card:hover {
-        transform: translateY(-2px);
         box-shadow: 0 6px 18px rgba(0,0,0,0.1);
       }
       
@@ -102,12 +203,28 @@ ui <- page_navbar(
       
       .card-body {
         padding: 1.25rem;
-        height: auto !important; 
-        overflow: visible !important; 
       }
+      .card:not([data-full-screen='true']) .card-body {
+        height: auto !important;
+        overflow: visible !important;
+      }
+
+      /* top navbar: Flatly colours the active/hovered link green, hard to read on the blue bar */
+      .navbar .nav-link.active, .navbar .nav-link:hover, .navbar .nav-link:focus { color: #ffffff !important; }
+      .navbar .nav-link.active { box-shadow: inset 0 -3px 0 #ffffff; }
+
+      /* ggiraph SVGs keep their aspect ratio: the container follows the SVG height; in full screen limit it to the viewport */
+      .girafe.html-widget { height: auto !important; }
+      .bslib-card[data-full-screen='true'] .girafe svg { max-height: calc(100vh - 160px); }
+
+      /* main tab bar (Raw Data, Filtering, ...) */
+      .nav-pills { margin-bottom: 1rem; row-gap: 0.25rem; }
+
+      /* accordion in the sidebar: compact headers */
+      .sidebar .accordion-button { font-weight: 600; font-size: 0.9rem; padding: 0.6rem 0.9rem; }
       
-      /* Ensure Plotly containers take up required space without scrolling */
-      .js-plotly-plot, .plotly {
+      /* spacing below the interactive plots */
+      .girafe.html-widget {
         margin-bottom: 10px;
       }
 
@@ -149,8 +266,7 @@ ui <- page_navbar(
         border: 1px solid #e9ecef;
         margin-top: 20px; 
       }
-    ")))
-  ),
+    "))),
   
   
   # Einbinden des CSS-Stylings für die Sidebar
@@ -183,6 +299,7 @@ ui <- page_navbar(
       }
       .well { background-color: #ffffff !important; border: 1px solid #e2e8f0 !important; }
     "))
+    )
   ),
   
 
@@ -261,7 +378,8 @@ ui <- page_navbar(
   nav_panel(
     title = "Single Plate Analysis",
     icon = icon("stop"),
-    page_sidebar(
+    layout_sidebar(
+      fillable = FALSE, border = FALSE, border_radius = FALSE,
       sidebar = sidebar(
         width = 350,
         title = "Analysis Parameters",
@@ -314,7 +432,7 @@ ui <- page_navbar(
               br(),
               tags$label("Replicate Variability", style="font-weight:500; font-size: 0.9rem;"),
               sliderInput("repDev", NULL, min = 0, max = 2, value = 0.3, step = 0.01),
-              span(class="help-block", "Maximum allowed standard deviation between replicates.")
+              span(class="help-block", "Maximum allowed SD of the technical replicates. If exceeded, the replicate furthest from the mean is removed (at least 2 are kept).")
             ),
             
             # --- MANUAL FILTERING UI ---
@@ -345,10 +463,7 @@ ui <- page_navbar(
                 placeholder = "Select at least 3 genes..."
               ),
               hr(),
-              # Parameter für die Algorithmen
-              tags$h6("Parameters"),
-              selectInput("norm_method", "Primary Algorithm", 
-                          choices = c("NormFinder", "geNorm")),
+              tags$p(class = "small text-muted mb-2", "Algorithm: geNorm (M value)"),
               actionButton("run_val_btn", "Run Validation", 
                            class = "btn-primary w-100", icon = icon("play")),
               hr(),
@@ -377,7 +492,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "input.groupSamples == true",
               actionButton("open_grouping_modal", "Configure Groups", class = "btn-primary btn-sm w-100"),
-              p(class="help-block", "Define groups and assign samples.")
+              p(class="help-block", "Define groups and assign samples. Each sample then counts as one biological replicate (mean of its technical replicates).")
             ),
             hr(),
         )),
@@ -386,177 +501,14 @@ ui <- page_navbar(
         # --- 3. RELATIVE dCq ---
         conditionalPanel(
           condition = "input.tabsSingle == 'Relative dCq'",
-          # Data Selection
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Selection"),
-            hr(),
-            virtualSelectInput("SamplePicker", "Filter Samples", choices = NULL, multiple = TRUE, search = TRUE),
-            virtualSelectInput("GenePicker", "Filter Genes", choices = NULL, multiple = TRUE, search = TRUE)
-          ),
-          # Data Visualization
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Visualization"),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("PlotData", "Data Type", choices = c("RQ", "dCq", "-dCq")),
-              virtualSelectInput("PlotType", "Plot Type", choices = c("Bar Chart", "Dot Plot"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("scale", "Y-Axis", choices = c("normal", "log10", "log2")),
-              virtualSelectInput("error_type", "Error Type", choices = c("SD" = "sd", "SEM" = "sem"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("ShowErrorBar", "Error Bars", FALSE),
-              checkboxInput("show_ref_line", "Ref. Line", FALSE)
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("show_significance", "Significance (*)", FALSE),
-              checkboxInput("facet_by_gene", "Facet by Gene", FALSE)
-            )
-          ),
-          # Plot Appearance
-          switchInput("show_plot_settings_dCq", label = "Appearance", value = FALSE, size = "small", onStatus = "success"),
-          conditionalPanel(
-            condition = "input.show_plot_settings_dCq",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Plot Appearance"),
-              textInput("plotTitle", "Plot Title"),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("xlab_custom", "X-Axis Label"),
-                textInput("ylab_custom", "Y-Axis Label")
-              ),
-              virtualSelectInput("colorpicker", "Color Palette", choices = colorlist),
-              layout_column_wrap(
-                width = 1/2,
-                sliderInput("axis_text_size", "Font Size", min = 6, max = 20, value = 12),
-                sliderInput("xTextAngle", "X-Angle", min = 0, max = 90, value = 0)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("legendTitle", "Legend Title"),
-                virtualSelectInput("legendPosition", "Position", choices = c("right", "none"))
-              ),
-              tags$label("Sample Ordering", style="font-size:0.8rem; font-weight:bold;"),
-              orderInput("x_order", NULL, items = NULL, width = "100%"),
-              span(class="help-block", "Drag and drop to reorder.")
-            )
-          ),
-          # Export Options
-          switchInput("show_export_settings_dCq", label = "Export Opt.", value = FALSE, size = "small"),
-          conditionalPanel(
-            condition = "input.show_export_settings_dCq",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Export Options"),
-              layout_column_wrap(
-                width = 1/2,
-                numericInput("plot_w_dCq", "Width (in)", value = 7),
-                numericInput("plot_h_dCq", "Height (in)", value = 5)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                virtualSelectInput("plot_format_dCq", "Format", choices = c("pdf", "svg", "png")),
-                numericInput("plot_res_dCq", "Scale", value = 3)
-              ),
-              downloadButton("download_plot_dCq", "Download Plot", class = "btn-primary w-100")
-            )
-          )
+          plot_settings_sidebar("", "dCq", "download_plot_dCq", c("RQ", "dCq", "-dCq"), c("pdf", "svg", "png"))
         ),
         
         
         # --- 4. RELATIVE ddCq ---
         conditionalPanel(
           condition = "input.tabsSingle == 'Relative ddCq'",
-          # Data Selection (inkl. Calibrator)
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Selection"),
-            virtualSelectInput("Mock", "Calibrator (Control)", choices = "", placeholder = "Select baseline..."),
-            span(class="help-block", "The baseline sample for ddCq."),
-            hr(),
-            virtualSelectInput("SamplePickerDDCt", "Filter Samples", choices = "", multiple = TRUE),
-            virtualSelectInput("GenePickerDDCt", "Filter Genes", choices = "", multiple = TRUE)
-          ),
-          # Data Visualization
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Visualization"),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("PlotDataDDCt", "Data Type", choices = c("Fold Change", "ddCt")),
-              virtualSelectInput("PlotTypeDDCt", "Plot Type", choices = c("Bar Chart", "Dot Plot"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("scaleDDCt", "Y-Axis", choices = c("normal", "log10", "log2")),
-              virtualSelectInput("error_typeDDCt", "Error Value", choices = c("SD" = "sd", "SEM" = "sem"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("ShowErrorBarDDCt", "Error Bars", FALSE),
-              checkboxInput("show_ref_lineDDCt", "Ref. Line", FALSE)
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("show_significanceDDCt", "Significance (*)", FALSE),
-              checkboxInput("facet_by_geneDDCt", "Facet by Gene", FALSE)
-            )
-          ),
-          # Appearance
-          switchInput("show_appearance_settings_ddCq", label = "Appearance", value = FALSE, size = "small", onStatus = "success"),
-          conditionalPanel(
-            condition = "input.show_appearance_settings_ddCq",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Plot Appearance"),
-              textInput("plotTitleDDCt", "Plot Title"),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("xlab_customDDCt", "X-Axis Label"),
-                textInput("ylab_customDDCt", "Y-Axis Label")
-              ),
-              virtualSelectInput("colorpickerDDCt", "Color Palette", choices = colorlist),
-              layout_column_wrap(
-                width = 1/2,
-                sliderInput("axis_text_sizeDDCt", "Font Size", min = 6, max = 20, value = 12),
-                sliderInput("xTextAngleDDCt", "X-Angle", min = 0, max = 90, value = 0)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("legendTitleDDCt", "Legend Title"),
-                virtualSelectInput("legendPositionDDCt", "Position", choices = c("right", "none"))
-              ),
-              orderInput("x_orderDDCt", "Sample Ordering", items = NULL, width = "100%"),
-              span(class="help-block", "Drag and drop to reorder.")
-            )
-          ),
-          # Export
-          switchInput("show_export_settingsDDCt", label = "Export Opt.", value = FALSE, size = "small"),
-          conditionalPanel(
-            condition = "input.show_export_settingsDDCt",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Export Options"),
-              layout_column_wrap(
-                width = 1/2,
-                numericInput("plot_w_ddCq", "Width (in)", value = 7), 
-                numericInput("plot_h_ddCq", "Height (in)", value = 5)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                virtualSelectInput("plot_format_ddCq", "Format", choices = c("png", "svg", "pdf")),
-                numericInput("plot_res_ddCq", "Scale", value = 3)
-              ),
-              downloadButton("download_plot_ddCq", "Download Plot", class = "btn-primary w-100")
-            )
-          )
+          plot_settings_sidebar("DDCt", "ddCq", "download_plot_ddCq", c("Fold Change", "ddCt"), c("png", "svg", "pdf"), calibrator = tagList(virtualSelectInput("Mock", "Calibrator (Control)", choices = "", placeholder = "Select baseline..."), span(class="help-block", "The baseline sample for ddCq."), hr()))
         ),
         
         # --- 5. STATISTICAL ANALYSIS ---
@@ -566,11 +518,7 @@ ui <- page_navbar(
           tags$div(
             class = "sidebar-section",
             tags$h6("Analysis Input"),
-            virtualSelectInput("limma_input", "Linear Model Input", choices = c("dCq")),
-            tags$div(
-              style = "font-size: 0.8rem; padding: 10px; background: #fff3cd; color: #856404; border-radius: 4px; margin-top:10px;",
-              tags$b("R Syntax:"), " Samples must start with a letter. Avoid special characters."
-            )
+            virtualSelectInput("limma_input", "Linear Model Input", choices = c("dCq"))
           ),
           # Parameters
           tags$div(
@@ -602,16 +550,17 @@ ui <- page_navbar(
       
       
         # Hauptbereich Single Plate Analyse mit Tabs
-        navset_card_pill(
+        navset_pill(
           id = "tabsSingle",
           nav_panel("Raw Data",
                     icon = icon("table"),
                     layout_column_wrap(
                       width = 1/2,
-                      card(card_header(tagList(icon("table"), "Imported Data Overview")), card_body(DTOutput("dataSinglePlate") %>% withSpinner())),
+                      card(full_screen = TRUE, card_header(tagList(icon("table"), "Imported Data Overview")), card_body(DTOutput("dataSinglePlate") %>% withSpinner())),
                       navset_card_underline(
-                        nav_panel("Plate View", icon = icon("eye"), plotlyOutput("plotCtCard", height = "500px") %>% withSpinner()),
-                        nav_panel("Global Distribution", icon = icon("chart-area"), plotlyOutput("plotCtDistrib", height = "500px") %>% withSpinner())
+                        full_screen = TRUE,
+                        nav_panel("Plate View", icon = icon("eye"), girafeOutput("plotCtCard", height = "500px") %>% withSpinner(), plate_selection_bar("apply_plate_selection")),
+                        nav_panel("Global Distribution", icon = icon("chart-area"), girafeOutput("plotCtDistrib", height = "500px") %>% withSpinner())
                       )
                     )
           ),
@@ -619,14 +568,15 @@ ui <- page_navbar(
                     icon = icon("vial-circle-check"),
                     layout_column_wrap(
                       width = 1/2,
-                      card(card_header(tagList(icon("filter"), "Well Exclusion Review")), 
+                      card(full_screen = TRUE, card_header(tagList(icon("filter"), "Well Exclusion Review")),
                            card_body(
-                             p(class="text-muted small mb-2", "Review flagged wells. Uncheck to manually re-include a well or check to mark it as an outlier."),
+                             p(class="text-muted small mb-2", "Wells excluded by the current filter settings. Switch to 'Manual Filtering' in the sidebar to choose exclusions yourself."),
                              DTOutput("dataSinglePlateBadRep") %>% withSpinner()
                            )),
                       navset_card_underline(
-                        nav_panel("Outlier Analysis", plotlyOutput("SinglePlateFilterPlot", height = "500px")),
-                        nav_panel("Cq Distribution", plotlyOutput("SinglePlateBoxplot", height = "500px")),
+                        full_screen = TRUE,
+                        nav_panel("Outlier Analysis", girafeOutput("SinglePlateFilterPlot", height = "500px")),
+                        nav_panel("Cq Distribution", girafeOutput("SinglePlateBoxplot", height = "500px")),
                         nav_panel("MIQE Compliance", uiOutput("SinglePlateMIQEcheck"))
                       )
                     )
@@ -635,11 +585,11 @@ ui <- page_navbar(
                     icon = icon("list-check"),
                     layout_column_wrap(
                       width = 1/2,
-                          # Wir nutzen Tabs innerhalb der Card für verschiedene Ansichten
-                          navset_card_underline(
-                            nav_panel("Ranking Table", DTOutput("ref_ranking_table")),
-                            nav_panel("Stability Plot", plotlyOutput("ref_stability_plot"))
-                          ),
+                      navset_card_underline(
+                        full_screen = TRUE,
+                        nav_panel("Ranking Table", DTOutput("ref_ranking_table")),
+                        nav_panel("Stability Plot", girafeOutput("ref_stability_plot"))
+                      ),
                       card(
                         fill = FALSE,
                         card_header("Algorithm Info"),
@@ -648,26 +598,26 @@ ui <- page_navbar(
                         )
                       ))
           ),
-  
+
           nav_panel("Relative dCq",
                     icon = icon("chart-bar"),
-                    card(fill = FALSE, card_header(tagList(icon("chart-bar"), "Gene Expression (dCq)")), card_body(plotlyOutput("dcqPlot", height = "500px") %>% withSpinner())),
-                    card(fill = FALSE, card_header(tagList(icon("list"), "Normalized Data Table")), card_body(DTOutput("ddctAbsolute"))),
+                    card(fill = FALSE, full_screen = TRUE, card_header(tagList(icon("chart-bar"), "Gene Expression (dCq)")), card_body(girafeOutput("dcqPlot", height = "500px") %>% withSpinner())),
+                    card(fill = FALSE, full_screen = TRUE, card_header(tagList(icon("list"), "Normalized Data Table")), card_body(DTOutput("ddctAbsolute")))
           ),
           nav_panel("Relative ddCq",
                     icon = icon("chart-line"),
-                    card(fill = FALSE, card_header(tagList(icon("chart-line"), "Relative Expression (Fold Change)")), card_body(plotlyOutput("ddctRelGraph2", height = "500px") %>% withSpinner())),
-                    card(fill = FALSE, card_header(tagList(icon("clipboard-list"), "ddCq Details")), card_body(DTOutput("ddctRelative")))
+                    card(fill = FALSE, full_screen = TRUE, card_header(tagList(icon("chart-line"), "Relative Expression (Fold Change)")), card_body(girafeOutput("ddctRelGraph2", height = "500px") %>% withSpinner())),
+                    card(fill = FALSE, full_screen = TRUE, card_header(tagList(icon("clipboard-list"), "ddCq Details")), card_body(DTOutput("ddctRelative")))
           ),
-      
-          
+
+
           nav_panel("Statistics",
                     icon = icon("calculator"),
-                    card(card_header(tagList(icon("calculator"), "Limma Statistics Results")), card_body(DTOutput("resultLimma") %>% withSpinner()))
+                    card(full_screen = TRUE, card_header(tagList(icon("calculator"), "Limma Statistics Results")), card_body(DTOutput("resultLimma") %>% withSpinner()))
           )
         )
 
-        )# Ende page_sidebar
+        )# Ende layout_sidebar
       ), # Ende Single Plate Analysis nav_panel
   
   
@@ -675,7 +625,8 @@ ui <- page_navbar(
   nav_panel(
     title = "Multiple Plate Analysis",
     icon = icon("table-cells-large"),
-    page_sidebar(
+    layout_sidebar(
+      fillable = FALSE, border = FALSE, border_radius = FALSE,
       sidebar = sidebar(
         width = 350,
         title = "Analysis Parameters",
@@ -728,7 +679,7 @@ ui <- page_navbar(
               br(),
               tags$label("Replicate Variability", style="font-weight:500; font-size: 0.9rem;"),
               sliderInput("repDevMulti", NULL, min = 0, max = 2, value = 0.3, step = 0.01),
-              span(class="help-block", "Maximum allowed standard deviation between replicates.")
+              span(class="help-block", "Maximum allowed SD of the technical replicates. If exceeded, the replicate furthest from the mean is removed (at least 2 are kept).")
             ),
             
             # --- MANUAL FILTERING UI (MP) ---
@@ -778,9 +729,7 @@ ui <- page_navbar(
               placeholder = "Select at least 3 genes..."
             ),
             hr(),
-            tags$h6("Parameters"),
-            selectInput("norm_method_multi", "Primary Algorithm", 
-                        choices = c("NormFinder")), # geNorm optional
+            tags$p(class = "small text-muted mb-2", "Algorithm: geNorm (M value)"),
             actionButton("run_val_btn_multi", "Run Validation", 
                          class = "btn-primary w-100", icon = icon("play")),
             hr(),
@@ -805,7 +754,7 @@ ui <- page_navbar(
             conditionalPanel(
               condition = "input.groupSamplesMulti == true",
               actionButton("open_grouping_modalMulti", "Configure Groups", class = "btn-primary btn-sm w-100"),
-              p(class="help-block", "Define groups and assign samples.")
+              p(class="help-block", "Define groups and assign samples. Each sample then counts as one biological replicate (mean of its technical replicates).")
             ),
             hr(),
           )),
@@ -814,177 +763,13 @@ ui <- page_navbar(
         # --- 4. RELATIVE dCq MULTI ---
         conditionalPanel(
           condition = "input.tabsMulti == 'Relative dCq'",
-          # Data Selection
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Selection"),
-          #  virtualSelectInput("RefsM", "Reference Gene(s)", choices = "", multiple = TRUE, placeholder = "Select..."),
-            hr(),
-            virtualSelectInput("SamplePickerMulti", "Filter Samples", choices = NULL, multiple = TRUE, search = TRUE),
-            virtualSelectInput("GenePickerMulti", "Filter Genes", choices = NULL, multiple = TRUE, search = TRUE)
-          ),
-          # Data Visualization
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Visualization"),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("PlotDataMulti", "Data Type", choices = c("RQ", "dCq", "-dCq")),
-              virtualSelectInput("PlotTypeMulti", "Plot Type", choices = c("Bar Chart", "Dot Plot"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("scaleMulti", "Y-Axis", choices = c("normal", "log10", "log2")),
-              virtualSelectInput("error_typeMulti", "Error Type", choices = c("SD" = "sd", "SEM" = "sem"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("ShowErrorBarMulti", "Error Bars", FALSE),
-              checkboxInput("show_ref_lineMulti", "Ref. Line", FALSE)
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("show_significanceMulti", "Significance (*)", FALSE),
-              checkboxInput("facet_by_geneMulti", "Facet by Gene", FALSE)
-            )
-          ),
-          # Appearance
-          switchInput("show_plot_settings_Multi", label = "Appearance", value = FALSE, size = "small", onStatus = "success"),
-          conditionalPanel(
-            condition = "input.show_plot_settings_Multi",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Plot Appearance"),
-              textInput("plotTitleMulti", "Plot Title"),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("xlab_customMulti", "X-Axis Label"),
-                textInput("ylab_customMulti", "Y-Axis Label")
-              ),
-              virtualSelectInput("colorpickerMulti", "Color Palette", choices = colorlist),
-              layout_column_wrap(
-                width = 1/2,
-                sliderInput("axis_text_sizeMulti", "Font Size", min = 6, max = 20, value = 12),
-                sliderInput("xTextAngleMulti", "X-Angle", min = 0, max = 90, value = 0)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("legendTitleMulti", "Legend Title"),
-                virtualSelectInput("legendPositionMulti", "Position", choices = c("right", "none"))
-              ),
-              tags$label("Sample Ordering", style="font-size:0.8rem; font-weight:bold;"),
-              orderInput("x_orderMulti", NULL, items = NULL, width = "100%"),
-              span(class="help-block", "Drag and drop to reorder.")
-            )
-          ),
-          # Export
-          switchInput("show_export_settings_Multi", label = "Export Opt.", value = FALSE, size = "small"),
-          conditionalPanel(
-            condition = "input.show_export_settings_Multi",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Export Options"),
-              layout_column_wrap(
-                width = 1/2,
-                numericInput("plot_w_Multi", "Width (in)", value = 7),
-                numericInput("plot_h_Multi", "Height (in)", value = 5)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                virtualSelectInput("plot_format_Multi", "Format", choices = c("pdf", "svg", "png")),
-                numericInput("plot_res_Multi", "Scale", value = 3)
-              ),
-              downloadButton("download_plot_MultiAbs", "Download Plot", class = "btn-primary w-100")
-            )
-          )
+          plot_settings_sidebar("Multi", "Multi", "download_plot_MultiAbs", c("RQ", "dCq", "-dCq"), c("pdf", "svg", "png"))
         ),
         
         # --- 5. RELATIVE ddCq MULTI ---
         conditionalPanel(
           condition = "input.tabsMulti == 'Relative ddCq'",
-          # Data Selection
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Selection"),
-            virtualSelectInput("MockM", "Calibrator (Control)", choices = NULL, placeholder = "Select baseline..."),
-            span(class="help-block", "The baseline sample for ddCq."),
-            hr(),
-            virtualSelectInput("SamplePickerDDCtMulti", "Filter Samples", choices = "", multiple = TRUE),
-            virtualSelectInput("GenePickerDDCtMulti", "Filter Genes", choices = "", multiple = TRUE)
-          ),
-          # Data Visualization
-          tags$div(
-            class = "sidebar-section",
-            tags$h6("Data Visualization"),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("PlotDataDDCtMulti", "Data Type", choices = c("Fold Change", "ddCt")),
-              virtualSelectInput("PlotTypeDDCtMulti", "Plot Type", choices = c("Bar Chart", "Dot Plot"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              virtualSelectInput("scaleDDCtMulti", "Y-Axis", choices = c("normal", "log10", "log2")),
-              virtualSelectInput("error_typeDDCtMulti", "Error Value", choices = c("SD" = "sd", "SEM" = "sem"))
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("ShowErrorBarDDCtMulti", "Error Bars", FALSE),
-              checkboxInput("show_ref_lineDDCtMulti", "Ref. Line", FALSE)
-            ),
-            layout_column_wrap(
-              width = 1/2,
-              checkboxInput("show_significanceDDCtMulti", "Significance (*)", FALSE),
-              checkboxInput("facet_by_geneDDCtMulti", "Facet by Gene", FALSE)
-            )
-          ),
-          # Appearance
-          switchInput("show_appearance_settings_ddCqM", label = "Appearance", value = FALSE, size = "small", onStatus = "success"),
-          conditionalPanel(
-            condition = "input.show_appearance_settings_ddCqM",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Plot Appearance"),
-              textInput("plotTitleDDCtMulti", "Plot Title"),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("xlab_customDDCtMulti", "X-Axis Label"),
-                textInput("ylab_customDDCtMulti", "Y-Axis Label")
-              ),
-              virtualSelectInput("colorpickerDDCtMulti", "Color Palette", choices = colorlist),
-              layout_column_wrap(
-                width = 1/2,
-                sliderInput("axis_text_sizeDDCtMulti", "Font Size", min = 6, max = 20, value = 12),
-                sliderInput("xTextAngleDDCtMulti", "X-Angle", min = 0, max = 90, value = 0)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                textInput("legendTitleDDCtMulti", "Legend Title"),
-                virtualSelectInput("legendPosition_DDCtMulti", "Position", choices = c("right", "none"))
-              ),
-              orderInput("x_orderDDCtMulti", "Sample Ordering", items = NULL, width = "100%"),
-              span(class="help-block", "Drag and drop to reorder.")
-            )
-          ),
-          # Export
-          switchInput("show_export_settings_ddCqM", label = "Export Opt.", value = FALSE, size = "small"),
-          conditionalPanel(
-            condition = "input.show_export_settings_ddCqM",
-            tags$div(
-              class = "sidebar-section",
-              tags$h6("Export Options"),
-              layout_column_wrap(
-                width = 1/2,
-                numericInput("plot_w_DDCtMulti", "Width (in)", value = 7),
-                numericInput("plot_h_DDCtMulti", "Height (in)", value = 5)
-              ),
-              layout_column_wrap(
-                width = 1/2,
-                virtualSelectInput("plot_format_DDCtMulti", "Format", choices = c("png", "svg", "pdf")),
-                numericInput("plot_res_DDCtMulti", "Scale", value = 3)
-              ),
-              downloadButton("download_plot_MultiRel", "Download Plot", class = "btn-primary w-100")
-            )
-          )
+          plot_settings_sidebar("DDCtMulti", "DDCtMulti", "download_plot_MultiRel", c("Fold Change", "ddCt"), c("png", "svg", "pdf"), calibrator = tagList(virtualSelectInput("MockM", "Calibrator (Control)", choices = NULL, placeholder = "Select baseline..."), span(class="help-block", "The baseline sample for ddCq."), hr()))
         ),
         
         # --- 6. STATISTICAL ANALYSIS MULTI ---
@@ -994,11 +779,7 @@ ui <- page_navbar(
           tags$div(
             class = "sidebar-section",
             tags$h6("Analysis Input"),
-            virtualSelectInput("limma_inputMulti", "Linear Model Input", choices = c("dCq")),
-            tags$div(
-              style = "font-size: 0.8rem; padding: 10px; background: #fff3cd; color: #856404; border-radius: 4px; margin-top:10px;",
-              tags$b("R Syntax:"), " Samples must start with a letter. Avoid special characters."
-            )
+            virtualSelectInput("limma_inputMulti", "Linear Model Input", choices = c("dCq"))
           ),
           # Parameters
           tags$div(
@@ -1029,9 +810,9 @@ ui <- page_navbar(
       ),
       
       # Hauptbereich Multi Plate
-      navset_card_pill(
+      navset_pill(
         id = "tabsMulti",
-        
+
         # --- TAB 1: RAW DATA ---
         nav_panel(
           title = "Raw Data",
@@ -1041,36 +822,40 @@ ui <- page_navbar(
             layout_column_wrap(
               width = 1/2,
               card(
+                full_screen = TRUE,
                 card_header(tagList(icon("table"), "Imported Multi-Plate Data")),
                 card_body(DTOutput("multiplePlatesData") %>% withSpinner())
               ),
               navset_card_underline(
+                full_screen = TRUE,
                 nav_panel(
                   title = "Plate View",
                   icon = icon("eye"),
-                  card_header(
-                    class = "d-flex justify-content-between align-items-center",
-                    "Cq per Plate",
+                  # Plattenauswahl als Toolbar über dem Plot
+                  div(
+                    class = "d-flex justify-content-between align-items-center gap-2",
+                    tags$span("Cq per Plate", class = "fw-semibold"),
                     virtualSelectInput(
-                      "PlateSelect", 
-                      label = NULL, 
-                      choices = "", 
+                      "PlateSelect",
+                      label = NULL,
+                      choices = "",
                       placeholder = "Select Plate",
                       width = "180px"
                     )
                   ),
-                  plotlyOutput("MultiplotCtCard", height = "500px")
+                  girafeOutput("MultiplotCtCard", height = "500px"),
+                  plate_selection_bar("apply_plate_selection_MP", "Selection applies to the plate shown; exclusions on other plates are kept.")
                 ),
                 nav_panel(
                   title = "Global Distribution",
                   icon = icon("chart-area"),
-                  plotlyOutput("MultiplotCtDistrib", height = "500px")
+                  girafeOutput("MultiplotCtDistrib", height = "500px")
                 )
               )
             )
           )
         ),
-        
+
         # --- TAB 2: FILTERING & QUALITY ---
         nav_panel(
           title = "Filtering & Quality",
@@ -1080,71 +865,62 @@ ui <- page_navbar(
             layout_column_wrap(
               width = 1/2,
               card(
+                full_screen = TRUE,
                 card_header(tagList(icon("filter"), "Well Exclusion Review")),
                 card_body(
-                  p(class="text-muted small mb-2", "Review flagged wells across all plates. Uncheck to manually re-include a well."),
+                  p(class="text-muted small mb-2", "Wells excluded by the current filter settings (all plates). Switch to 'Manual Filtering' in the sidebar to choose exclusions yourself."),
                   DTOutput("dataMultiplePlatesBadRep") %>% withSpinner()
                 )
               ),
               navset_card_underline(
-                nav_panel("Outlier Analysis", plotlyOutput("MultiplePlatesFilterPlot", height = "500px")),
-                nav_panel("Cq Distribution", plotlyOutput("MultiplePlatesBoxplot", height = "500px")),
+                full_screen = TRUE,
+                nav_panel("Outlier Analysis", girafeOutput("MultiplePlatesFilterPlot", height = "500px")),
+                nav_panel("Cq Distribution", girafeOutput("MultiplePlatesBoxplot", height = "500px")),
                 nav_panel("MIQE Compliance", uiOutput("MultiplePlateMIQEcheck"))
               )
             )
           )
         ),
-        
+
         # --- TAB 3: INTER-PLATE CALIBRATION ---
         nav_panel(
           title = "Inter-Plate Calibration",
           icon = icon("scale-balanced"),
           conditionalPanel(
             condition = "output.fileUploadedMulti",
-            
-            layout_column_wrap(
-              width = 1, # Container über die volle Breite
-              fill = FALSE,
-              
-              layout_column_wrap(
-                width = 1/3, # Bestimmt das Verhältnis: 2 Teile Haupt-Card, 1 Teil Methodology
-                # Wir nutzen hier fixere Breiten für das 2:1 Verhältnis
-                style = "grid-template-columns: 2fr 1fr;", 
-                
-                # LINKER BEREICH: Die kombinierte Analyse-Card
 
-                    navset_card_underline(
-                      # Tab 1: Die Roh-IPCs
-                      nav_panel(
-                        title = "Inter-Plate Calibrators", 
-                        DTOutput("extractedIPCsTable")
-                      ),
-                      # Tab 2: Der visuelle Check
-                      nav_panel(
-                        title = "Calibration Check Plot", 
-                        plotlyOutput("plotIPCcomparison", height = "550px")
-                      ),
-                      # Tab 3: Die berechneten Faktoren
-                      nav_panel(
-                        title = "Calibration Factors",
-                        DTOutput("tableCalibrationFactors") %>% withSpinner()
-                  )
+            # 2:1 - links die Analyse, rechts die Methodik (auf kleinen Bildschirmen untereinander)
+            layout_columns(
+              col_widths = c(8, 4),
+              navset_card_underline(
+                full_screen = TRUE,
+                # Tab 1: Die Roh-IPCs
+                nav_panel(
+                  title = "Inter-Plate Calibrators",
+                  DTOutput("extractedIPCsTable")
                 ),
-                
-                # RECHTER BEREICH: Methodology
-                card(
-                  card_header(tagList(icon("info-circle"), "Methodology")),
-                  card_body(
-                    uiOutput("ipc_info_text")
-                  )
+                # Tab 2: Der visuelle Check
+                nav_panel(
+                  title = "Calibration Check Plot",
+                  girafeOutput("plotIPCcomparison", height = "550px")
+                ),
+                # Tab 3: Die berechneten Faktoren
+                nav_panel(
+                  title = "Calibration Factors",
+                  DTOutput("tableCalibrationFactors") %>% withSpinner()
+                )
+              ),
+              card(
+                card_header(tagList(icon("info-circle"), "Methodology")),
+                card_body(
+                  uiOutput("ipc_info_text")
                 )
               )
             ),
-            
-            hr(),
-            
+
             # UNTERER BEREICH: Die resultierenden Daten
             card(
+              full_screen = TRUE,
               card_header(tagList(icon("table"), "Full Calibrated Data Table")),
               card_body(
                 DTOutput("interPlateCalibration")
@@ -1152,64 +928,64 @@ ui <- page_navbar(
             )
           )
         ),
-        
-        
+
+
         # --- REFERENCE FINDER MAIN MULTI ---
         nav_panel("Reference Finder",
                   icon = icon("list-check"),
                   layout_column_wrap(
                     width = 1/2,
-                        # Eigene IDs für die Multi-Plate Outputs
-                        navset_card_underline(
-                          nav_panel("Ranking Table", DTOutput("ref_ranking_table_multi")),
-                          nav_panel("Stability Plot", plotlyOutput("ref_stability_plot_multi"))
-                        ),
+                    # Eigene IDs für die Multi-Plate Outputs
+                    navset_card_underline(
+                      full_screen = TRUE,
+                      nav_panel("Ranking Table", DTOutput("ref_ranking_table_multi")),
+                      nav_panel("Stability Plot", girafeOutput("ref_stability_plot_multi"))
+                    ),
                     card(
                       fill = FALSE,
                       card_header("Algorithm Info"),
                       card_body(
-                        # Hier nutzen wir das gleiche UI-Output wie SP, 
-                        # da die Erklärung identisch bleibt
                         uiOutput("algo_description_multi")
                       )
                     )
                   )
         ),
-        
-        
+
+
         # --- TAB 4: RELATIVE dCq ---
         nav_panel(
           title = "Relative dCq",
           icon = icon("chart-column"),
-            card(fill = FALSE, 
+            card(fill = FALSE, full_screen = TRUE,
               card_header(tagList(icon("chart-bar"), "Gene Expression (dCq)")),
-              card_body(plotlyOutput("ddctMultiAbsGraph", height = "500px") %>% withSpinner())
+              card_body(girafeOutput("ddctMultiAbsGraph", height = "500px") %>% withSpinner())
             ),
-            card(fill = FALSE, 
+            card(fill = FALSE, full_screen = TRUE,
               card_header(tagList(icon("list"), "Normalized Data Table")),
               card_body(DTOutput("ddctAbsoluteMulti"))
             )
         ),
-        
+
         # --- TAB 5: RELATIVE ddCq ---
         nav_panel(
           title = "Relative ddCq",
           icon = icon("chart-line"),
-            card(fill = FALSE, 
+            card(fill = FALSE, full_screen = TRUE,
               card_header(tagList(icon("chart-line"), "Relative Expression (Fold Change)")),
-              card_body(plotlyOutput("ddctRelGraphMulti", height = "500px") %>% withSpinner())
+              card_body(girafeOutput("ddctRelGraphMulti", height = "500px") %>% withSpinner())
             ),
-            card(fill = FALSE, 
+            card(fill = FALSE, full_screen = TRUE,
               card_header(tagList(icon("clipboard-list"), "ddCq Details")),
               card_body(DTOutput("ddctRelativeMulti"))
             )
         ),
-        
+
         # --- TAB 6: STATISTICAL ANALYSIS ---
         nav_panel(
           title = "Statistics",
           icon = icon("calculator"),
           card(
+            full_screen = TRUE,
             card_header(tagList(icon("calculator"), "Limma Statistics Results")),
             card_body(
               p("Statistical analysis of differentially expressed genes for multi-plate experiments."),

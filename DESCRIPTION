@@ -1,13 +1,13 @@
 Package: qRAT
 Type: Package
 Title: qPCR Relative Expression Analysis Tool
-Version: 0.6.0
+Version: 0.7.0
 Author: Daniel Flatschacher [aut, cre]
 Maintainer: Daniel Flatschacher <daniel.flatschacher@uibk.ac.at>
 Description: An R-based standalone application to automate the processing of 
     raw Quantification Cycle (Cq) data files. It provides a comprehensive 
     solution for relative quantification (delta-delta Cq) including 
-    inter-plate calibration, reference gene stability analysis (geNorm), 
+    inter-plate calibration, reference gene stability analysis (geNorm),
     and publication-ready visualizations.
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -21,7 +21,6 @@ Imports:
     bsicons,
     waiter,
     ggplot2,
-    plotly,
     dplyr,
     tidyr,
     data.table,
@@ -31,11 +30,22 @@ Imports:
     RColorBrewer,
     ctrlGene,
     magrittr,
-    stringr
-Depends: 
+    shinycssloaders,
+    shinyjqui,
+    viridisLite,
+    rlang,
+    xfun,
+    ggiraph,
+    svglite
+Depends:
     R (>= 4.0.0),
     HTqPCR,
     ddCt,
     limma
+Suggests:
+    testthat (>= 3.0.0),
+    jsonlite,
+    pkgload
+Config/testthat/edition: 3
 URL: https://github.com/DaniFlat/qRAT
 BugReports: https://github.com/DaniFlat/qRAT/issues

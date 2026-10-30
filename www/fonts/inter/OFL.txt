@@ -1,0 +1,7 @@
+Inter font (weight 400, Google Fonts subsets), bundled with qRAT so the app does not download it at startup.
+
+Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The full license text is available at https://openfontlicense.org
+and in the Inter repository: https://github.com/rsms/inter/blob/master/LICENSE.txt

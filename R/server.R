@@ -18,7 +18,7 @@
 #' @importFrom tools file_ext
 #' @importFrom HTqPCR normalizeCtData limmaCtData
 #' @importFrom limma makeContrasts
-#' @importFrom plotly renderPlotly ggplotly plotlyOutput
+#' @importFrom ggiraph girafe renderGirafe girafeOutput opts_sizing opts_tooltip opts_hover opts_selection opts_zoom opts_toolbar
 #' @importFrom shinyWidgets virtualSelectInput
 #' @importFrom shinyjqui orderInput
 
@@ -28,7 +28,7 @@ library("bslib")
 library("shinyWidgets")
 library("HTqPCR")
 library("ddCt")
-library("plotly")
+library("ggiraph")
 #library("shinyjs")
 #library("ggplot2")
 library("scales")
@@ -37,7 +37,6 @@ library("DT")
 library("dplyr")
 library("waiter")
 library("tidyr")
-library("stringr")
 library("magrittr")
 library("shinycssloaders")
 library("xfun")
@@ -50,6 +49,24 @@ server <- function(input, output, session) {
   
   waiter_hide()
   MP_files_validated <- reactiveVal(FALSE)
+
+  # Send an input update only when the choices really changed (per session).
+  # Without this, every filter change re-sent the choices, reset user selections
+  # (reference genes, calibrator, sample order) and re-triggered the downstream chain.
+  # Reactive in einem Observer lesen: ein Fehler (z. B. aus einem fehlerhaften Upload) ergibt NULL.
+  # Unbehandelte Fehler in Observern beenden in Shiny die ganze Sitzung (grauer Bildschirm);
+  # req()-Abbrüche werden unverändert weitergereicht.
+  safely <- function(expr) {
+    tryCatch(expr, error = function(e) if (inherits(e, "shiny.silent.error")) stop(e) else NULL)
+  }
+
+  last_sent_choices <- list()
+  send_if_changed <- function(key, choices, update) {
+    if (identical(last_sent_choices[[key]], choices)) return(invisible(FALSE))
+    last_sent_choices[[key]] <<- choices
+    update()
+    invisible(TRUE)
+  }
   
   
   check_filetype <- function(failed = FALSE) {
@@ -148,29 +165,17 @@ server <- function(input, output, session) {
     all_results <- list()
     
     for (i in 1:nrow(ff)) {
-      # Wir versuchen die Datei zu lesen. Wenn es scheitert, stürzt die App nicht ab.
-      result <- tryCatch({
-        dt_check <- fread(ff$datapath[i], header = TRUE, sep = sep, nrows = 5)
-        c_names <- tolower(names(dt_check))
-        
-        list(
-          plateName = ff$name[i],
-          is_sample = length(intersect(sampleColumnList, c_names)) >= 1,
-          is_well   = length(intersect(wellColumnList, c_names)) >= 1,
-          is_gene   = length(intersect(geneColumnList, c_names)) >= 1,
-          is_cq     = length(intersect(cqColumnList, c_names)) >= 1,
-          error     = FALSE
-        )
-      }, error = function(e) {
-        # Falls fread komplett scheitert (z.B. falsches Format)
-        list(
-          plateName = ff$name[i],
-          is_sample = FALSE, is_well = FALSE, is_gene = FALSE, is_cq = FALSE,
-          error = TRUE,
-          errorMessage = e$message
-        )
-      })
-      all_results[[i]] <- result
+      # gleiche Einlese-Logik wie die Auswertung (inkl. Geräte-Kopfzeilen); Lesefehler beenden die Sitzung nicht
+      rd <- read_plate_file(ff$datapath[i], sep)
+      all_results[[i]] <- list(
+        plateName = ff$name[i],
+        is_sample = is.null(rd$error) && !"Sample" %in% rd$missing,
+        is_well   = is.null(rd$error) && !"Well" %in% rd$missing,
+        is_gene   = is.null(rd$error) && !"Gene" %in% rd$missing,
+        is_cq     = is.null(rd$error) && !"Ct" %in% rd$missing,
+        error     = !is.null(rd$error),
+        errorMessage = rd$error
+      )
     }
     
     MP_validateAllFiles(all_results)
@@ -284,78 +289,62 @@ server <- function(input, output, session) {
   wellColumnList <- c("well")
   geneColumnList <- c("gene", "target", "target name", "detector", "primer/probe")
   cqColumnList <- c("ct", "cq")
+
+  # Liest eine Plattendatei ein (Geräte-Kopfzeilen vor der Zeile "Well..." werden übersprungen) und ordnet
+  # die Spalten Well/Sample/Gene/Ct zu. Gibt es mehrere passende Spalten (z. B. "Sample" und "Sample Name"),
+  # gilt die Reihenfolge der Listen oben. Fehler werden zurückgegeben statt geworfen, damit ein fehlerhafter
+  # Upload nicht die Sitzung beendet.
+  # Rückgabe: list(data = data.table(Well, Sample, Gene, Ct) oder NULL, missing = fehlende Spalten, error = Lesefehler)
+  read_plate_file <- function(path, sep) {
+    dt <- tryCatch({
+      file.header <- readLines(con = path, n = 100, warn = FALSE)
+      n.header <- grep("^Well", file.header) - 1
+      if (length(n.header) == 0) n.header <- 0
+      fread(path, header = TRUE, sep = sep, skip = n.header[1])
+    }, error = function(e) e)
+    if (inherits(dt, "error")) return(list(data = NULL, missing = character(0), error = conditionMessage(dt)))
+
+    names_lc <- tolower(names(dt))
+    roles <- list(Well = wellColumnList, Sample = sampleColumnList, Gene = geneColumnList, Ct = cqColumnList)
+    cols <- vapply(roles, function(cands) {
+      hit <- intersect(cands, names_lc)
+      if (length(hit)) hit[1] else NA_character_
+    }, character(1))
+    missing <- names(cols)[is.na(cols)]
+    if (length(missing) > 0) return(list(data = NULL, missing = missing, error = NULL))
+
+    out <- dt[, match(cols, names_lc), with = FALSE]
+    setnames(out, names(cols))
+    # Proben-/Gennamen wie "1" oder "24" sollen Namen bleiben, keine Zahlen
+    out[, `:=`(Well = as.character(Well), Sample = as.character(Sample), Gene = as.character(Gene))]
+    list(data = out, missing = character(0), error = NULL)
+  }
+
   
   # Single Plate read file
   
   readSinglePlateData <- reactive({
-    
-    if (input$Sep == "tab") sep <- "\t"
-    if (input$Sep == "comma") sep <- ","
-    if (input$Sep == "semicolon") sep <- ";"
-    if (input$Sep == "auto") sep <- "auto"
-    
+
+    sep <- switch(input$Sep %||% "auto", tab = "\t", comma = ",", semicolon = ";", "auto")
+
     req(input$dtfile)
     f <- input$dtfile
-    if (is.null(f)) {
-      return(NULL)
-    } else {
-      filex <- f$datapath
-    }
-    
-    #Check file type
-    req(input$dtfile)
-    ext <- file_ext(f$datapath)
-    if (!ext %in% c(
-      'text/csv',
-      'text/comma-separated-values',
-      'text/tab-separated-values',
-      'text/plain',
-      'csv',
-      'txt',
-      'tsv')) {
+
+    # Check file type - bei falschem Typ abbrechen (vorher wurde trotzdem weitergelesen)
+    if (!tolower(file_ext(f$name)) %in% c("csv", "txt", "tsv")) {
       showModal(check_filetype(failed = TRUE))
+      return(NULL)
     }
-    
-    # Scan through beginning of file, max 100 lines and look for row with "Well"
-    file.header <- readLines(con = filex, n = 100)
-    n.header <- grep("^Well", file.header) - 1
-    if (length(n.header) == 0) {
-      n.header <- 0
-    }
-    
-    SP_data <- fread(filex, header = TRUE, sep = sep, skip = n.header)
-    
-    
-    ##Validate Input Data File
-    #change all column names to lowercase for easy comparison with prepared column-name-lists
-    SP_data <- SP_data %>%
-      rename_with(tolower)
-    
-    column_names <- colnames(SP_data)
-    
-    validateInputFile <- function(Sample_Column=TRUE, Well_Column=TRUE, Gene_Column=TRUE, Cq_Column=TRUE) {
-      if (length(intersect(sampleColumnList,column_names)) < 1) Sample_Column = FALSE
-      if (length(intersect(wellColumnList,column_names)) < 1) Well_Column = FALSE
-      if (length(intersect(geneColumnList,column_names)) < 1) Gene_Column = FALSE
-      if (length(intersect(cqColumnList,column_names)) < 1) Cq_Column = FALSE
-      
-      showModal(SP_validateInputFile(Sample_Column, Well_Column, Gene_Column, Cq_Column))
-    }
-    
-    validateInputFile()
-    
-    
-    ## change all column names to lowercase and rename columns to Well, Sample, Gene, Ct
-    SP_data <- SP_data %>%
-      rename(
-        Sample = any_of(sampleColumnList),
-        Well = any_of(wellColumnList),
-        Gene = any_of(geneColumnList),
-        Ct = any_of(cqColumnList)
-      )
-    
-    # --- SICHERHEITS-CHECK 1: Spalten vorhanden? ---
-    if (!"Well" %in% names(SP_data)) return(NULL)
+
+    rd <- read_plate_file(f$datapath, sep)
+
+    ##Validate Input Data File (ein unlesbarer Inhalt zählt wie "alle Spalten fehlen")
+    found <- function(role) is.null(rd$error) && !role %in% rd$missing
+    showModal(SP_validateInputFile(found("Sample"), found("Well"), found("Gene"), found("Ct")))
+
+    # --- SICHERHEITS-CHECK: ohne alle Pflichtspalten keine Auswertung ---
+    if (is.null(rd$data)) return(NULL)
+    SP_data <- rd$data
     
     ## generate replicate number for dataview
     SP_data$TempRepNum <- paste(SP_data$Sample, SP_data$Gene)
@@ -399,7 +388,6 @@ server <- function(input, output, session) {
     xx <- info$data
     if (is.null(xx)) return(NULL)
     
-    sep_val <- if (input$Sep == "tab") "\t" else if (input$Sep == "comma") "," else if (input$Sep == "semicolon") ";" else "\t"
     experimental_controls <- input$NTC_Input
     
     # --- Step 1: Qaulity ---
@@ -414,9 +402,10 @@ server <- function(input, output, session) {
     # --- FILTER Methods ---
     if (input$filterMode == "auto") {
       # AUTOMATIC MODE
+      # erst Cq-Grenzen, dann Replikat-Streuung (ein Wert außerhalb der Grenzen soll die SD nicht verfälschen)
       processed <- processed %>%
-        mutate(Ct = remove_replicates(Ct)) %>%
-        mutate(Ct = remove_maxCt(Ct))
+        mutate(Ct = remove_maxCt(Ct)) %>%
+        mutate(Ct = remove_replicates(Ct))
       
     } else {
       # MANUAL MODE
@@ -449,8 +438,10 @@ server <- function(input, output, session) {
       rename(Cq = Cq_backup)
     
     # --- Step 2: GROUPING  ---
-    if (isTRUE(input$groupSamples) && !is.null(confirmedGrouping())) {
+    grouping_active <- isTRUE(input$groupSamples) && !is.null(confirmedGrouping())
+    if (grouping_active) {
       groups <- confirmedGrouping()
+      processed$BioSample <- as.character(processed$Sample)   # ursprüngliche (biologische) Probe merken
       new_sample_names <- as.character(processed$Sample)
       
       for (g in groups) {
@@ -465,29 +456,35 @@ server <- function(input, output, session) {
       processed <- processed %>% mutate(Sample = trimws(Sample)) %>% filter(nzchar(Sample))
     }
     
-    # Daten schreiben für das qPCR-Paket
-    fwrite(processed, file = "fileSingle.csv", sep = sep_val)
-    
     # Downstream Updates
     Genes <- unique(processed$Gene)
-    refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
-    selected_refs <- if (length(refs) == 0) Genes[length(Genes)] else Genes[refs]
-    updateVirtualSelect("Refs", choices = Genes, selected = selected_refs)
-    
-    # qPCR Objekt Erstellung
+    send_if_changed("Refs", Genes, function() {
+      refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
+      selected_refs <- if (length(refs) == 0) Genes[length(Genes)] else Genes[refs]
+      updateVirtualSelect("Refs", choices = Genes, selected = selected_refs)
+    })
+
+    # Auswertungsdaten: bei aktiver Gruppierung geht jede biologische Probe mit dem Mittel ihrer technischen
+    # Replikate ein (qPCR.R, aggregate_biological); sonst die technischen Replikate selbst
+    analysis <- if (grouping_active) aggregate_biological(processed) else processed
+
+    # qPCR Objekt Erstellung (direkt aus dem Speicher, keine Zwischendatei)
     htset <- NULL; ddset <- NULL; Samples <- NULL
-    xdata <- read.qPCRtable("fileSingle.csv", sep = sep_val)
+    xdata <- read.qPCRtable(analysis)
     if (!is.null(xdata)) {
       htset <- xdata$data.ht
       ddset <- xdata$data.ddct
       Samples <- unique(as.character(pData(htset)$Sample))
-      updateVirtualSelect("Mock", choices = Samples, selected = Samples[1])
-      updateVirtualSelect("Comps", choices = Samples, selected = Samples)
+      send_if_changed("Mock_Comps", Samples, function() {
+        updateVirtualSelect("Mock", choices = Samples, selected = Samples[1])
+        updateVirtualSelect("Comps", choices = Samples, selected = Samples)
+      })
     }
     
     return(list(
-      data = processed, 
-      data.ht = htset, 
+      data = processed,        # technische Replikate (Qualitätskontrolle, Plots der Filterung)
+      analysis = analysis,     # Grundlage für dCq/ddCq und Statistik
+      data.ht = htset,
       data.ddct = ddset, 
       badReplicates = badRep, 
       CompSamples = Samples
@@ -508,14 +505,9 @@ server <- function(input, output, session) {
   
   
   # remove replicates based on threshold, single plates
+  # (SD > Grenzwert: der am weitesten vom Mittelwert entfernte Wert wird entfernt, mind. 2 bleiben; qPCR.R)
   remove_replicates <- function(x, na.rm = TRUE, ...) {
-    repDev <- input$repDev
-    
-    val <- mean(x, na.rm = na.rm)
-    y <- x
-    y[x < (val - repDev)] <- NA
-    y[x > (val + repDev)] <- NA
-    y
+    filter_replicates_sd(x, input$repDev)
   }
   
   # remove samples based on max Ct value, multiple plates
@@ -531,13 +523,7 @@ server <- function(input, output, session) {
   
   # remove replicates based on threshold, multiple plates
   remove_replicatesMP <- function(x, na.rm = TRUE, ...) {
-    repDev <- input$repDevMulti
-    
-    val <- mean(x, na.rm = na.rm)
-    y <- x
-    y[x < (val - repDev)] <- NA
-    y[x > (val + repDev)] <- NA
-    y
+    filter_replicates_sd(x, input$repDevMulti)
   }
   
   
@@ -559,7 +545,7 @@ server <- function(input, output, session) {
     
     # 1. Dateityp-Check
     for (i in 1:numfiles) {
-      ext <- tools::file_ext(ff$name[i])
+      ext <- tolower(tools::file_ext(ff$name[i]))
       if (!ext %in% c("csv", "txt", "tsv")) {
         showModal(modalDialog(
           title = "Invalid File Type",
@@ -570,37 +556,29 @@ server <- function(input, output, session) {
       }
     }
     
-    # 2. Dateien einzeln einlesen und validieren
+    # 2. Dateien einzeln einlesen; Platten ohne Pflichtspalten (oder unlesbare) werden ausgeschlossen,
+    #    statt als Platte mit lauter leeren Cq-Werten mitgerechnet zu werden
+    skipped <- character(0)
     for (i in 1:numfiles) {
-      file_path <- ff$datapath[i]
-      current_filename <- ff$name[i]
-      
-      # Header-Erkennung
-      file.header <- readLines(con = file_path, n = 100)
-      n.header <- grep("^Well", file.header) - 1
-      if (length(n.header) == 0) n.header <- 0
-      
-      # Einlesen
-      dt <- fread(file_path, header = TRUE, sep = sep, skip = n.header)
-      filelist[[i]] <- dt
-      
+      rd <- read_plate_file(ff$datapath[i], sep)
+      if (is.null(rd$data)) {
+        reason <- if (!is.null(rd$error)) "not readable" else paste("missing column(s):", paste(sub("^Ct$", "Cq", rd$missing), collapse = ", "))
+        skipped <- c(skipped, paste0(ff$name[i], " (", reason, ")"))
+      } else {
+        filelist[[as.character(i)]] <- rd$data   # Plattennummer = Position der Datei im Upload
+      }
     }
-    
+    send_if_changed("MP_skipped", skipped, function() {
+      if (length(skipped) > 0) {
+        showNotification(tagList(tags$b("Plate(s) excluded from the analysis:"), tags$br(), paste(skipped, collapse = "; ")),
+                         type = "error", duration = 20)
+      }
+    })
+    if (length(filelist) == 0) return(NULL)
+
     # 3. Datenverarbeitung
     multiplePlates <- rbindlist(filelist, use.names = TRUE, fill = TRUE, idcol = "PlateNumber")
-    
-    multiplePlates <- multiplePlates %>%
-      rename_with(tolower) %>%
-      rename(
-        Sample = any_of(sampleColumnList),
-        Well = any_of(wellColumnList),
-        Gene = any_of(geneColumnList),
-        Ct = any_of(cqColumnList),
-        PlateNumber = platenumber
-      )
-    
-    # --- SICHERHEITS-CHECK 1: Existiert die Spalte 'Well'? ---
-    if (!"Well" %in% names(multiplePlates)) return(NULL)
+    multiplePlates$PlateNumber <- as.integer(multiplePlates$PlateNumber)
     
     # Replikate-Nummer generieren
     multiplePlates$TempRepNum <- paste(multiplePlates$Sample, multiplePlates$Gene)
@@ -665,8 +643,8 @@ server <- function(input, output, session) {
     if (input$filterModeMP == "auto") {
       # AUTOMATIC MODE
       correctRep <- correctRep %>%
-        mutate(Ct = remove_replicatesMP(Ct)) %>% 
-        mutate(Ct = remove_maxCtMulti(Ct))
+        mutate(Ct = remove_maxCtMulti(Ct)) %>%
+        mutate(Ct = remove_replicatesMP(Ct))
       
     } else {
       # MANUAL MODE
@@ -691,6 +669,7 @@ server <- function(input, output, session) {
     # --- SCHRITT 2: SAMPLE GROUPING ---
     if (isTRUE(input$groupSamplesMulti) && !is.null(confirmedGroupingMulti())) {
       groups <- confirmedGroupingMulti()
+      correctRep$BioSample <- as.character(correctRep$Sample)   # ursprüngliche (biologische) Probe merken
       new_names <- as.character(correctRep$Sample)
       
       for (g in groups) {
@@ -705,7 +684,10 @@ server <- function(input, output, session) {
     
     # Update IPC Selection
     SamplesWithIPCs <- sort(unique(as.character(correctRep$Sample)))
-    updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = input$IPC)
+    # isolate(): a change of the IPC selection must not re-run the whole filtering step
+    send_if_changed("IPC", SamplesWithIPCs, function() {
+      updateVirtualSelect("IPC", choices = SamplesWithIPCs, selected = isolate(input$IPC))
+    })
     
     # Spalte OriginalRowID entfernen, falls sie später stört
     correctRep$OriginalRowID <- NULL
@@ -713,55 +695,64 @@ server <- function(input, output, session) {
     return(list(data = correctRep, badReplicates = badRep))
   })
   
-  # --- multiData 2: Trennung der IPCs von den Haupt-Proben ---
-  multiData2 <- reactive({
+  # --- multiData 1b: Trennung der IPCs von den Haupt-Proben (unkalibrierte Cq-Werte) ---
+  multiDataNoIPCs <- reactive({
     req(input$plates)
-    
-    sep <- if (input$SepM == "comma") "," else if (input$SepM == "semicolon") ";" else "\t"
-    
+
     info <- multiData()
     if (is.null(info)) return(NULL)
-    
+
     info2 <- info$data
     if (is.null(info2)) return(NULL)
-    
+
     # Falls IPC Kalibrierung aktiv ist, IPC Probe aus dem dCt/ddCt Datensatz entfernen
     if (isTRUE(input$Id027)) {
       req(input$IPC)
       ipcs <- input$IPC
       info2 <- info2[!(info2$Sample %in% ipcs), ]
     }
-    
-    fwrite(info2, file = "fileMultiNoIPCs.csv", sep = sep)
-    
+
+    info2
+  })
+
+  # --- multiData 2: qPCR-Objekte für dCq/ddCq und limma ---
+  multiData2 <- reactive({
+    info2 <- multiDataNoIPCs()
+    if (is.null(info2)) return(NULL)
+
+    # Bei aktiver IPC-Kalibrierung werden die kalibrierten Cq-Werte ausgewertet
+    calibrated <- if (isTRUE(input$Id027)) interPlateCalibration() else info2
+    # bei aktiver Gruppierung zählt jede biologische Probe einmal (Mittel ihrer technischen Replikate, über alle Platten)
+    analysis_data <- if ("BioSample" %in% names(calibrated)) aggregate_biological(calibrated) else calibrated
+
     # Gene einlesen und Housekeeper vorschlagen
     Genes <- unique(info2$Gene)
-    refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
-    selected_refs <- if (length(refs) == 0) Genes[length(Genes)] else Genes[refs]
-    updateVirtualSelect("RefsM", choices = Genes, selected = selected_refs)
-    
-    # Konvertierung in das interne qPCR-Format
+    send_if_changed("RefsM", Genes, function() {
+      refs <- grep("^(ACT|UBQ|REF|RF|BACTIN|ACTIN|GAPDH|TUB|TUBULIN).*", Genes, ignore.case = TRUE)
+      selected_refs <- if (length(refs) == 0) Genes[length(Genes)] else Genes[refs]
+      updateVirtualSelect("RefsM", choices = Genes, selected = selected_refs)
+    })
+
+    # Konvertierung in das interne qPCR-Format (direkt aus dem Speicher, keine Zwischendatei)
     htset <- NULL; ddset <- NULL; Samples <- NULL
-    xdata <- read.qPCRtableMulti("fileMultiNoIPCs.csv", sep = sep)
-    
+    xdata <- read.qPCRtableMulti(analysis_data)
+
     if (!is.null(xdata)) {
       htset <- xdata$data.ht
       ddset <- xdata$data.ddct
       Samples <- unique(as.character(pData(htset)$Sample))
-      
-      updateVirtualSelect("MockM", choices = Samples, selected = Samples[1])
-      updateVirtualSelect("CompsM", choices = Samples, selected = Samples)
-      
-      # Dynamische Anpassung der Plot-Achsen
-      if (length(Samples) > 4 | max(nchar(Samples)) > 6) {
-        updateSliderInput(session, "side1", value = 8)
-        updateSliderInput(session, "xsrt", value = 30)
-      }
+
+      send_if_changed("MockM_CompsM", Samples, function() {
+        updateVirtualSelect("MockM", choices = Samples, selected = Samples[1])
+        updateVirtualSelect("CompsM", choices = Samples, selected = Samples)
+      })
     }
     
     return(list(
-      SamplesNoIPCs = info2, 
-      xdata = xdata, 
+      SamplesNoIPCs = info2,
+      SamplesCalibrated = calibrated,   # je Well (mit Plattennummer), z. B. für den Reference Finder
+      SamplesAnalysed = analysis_data,
+      xdata = xdata,
       data.ht = htset, 
       data.ddct = ddset, 
       CompSamples = Samples
@@ -771,25 +762,32 @@ server <- function(input, output, session) {
   
   
   
+  # UI-Auswahl der p-Wert-Korrektur ("BH", "Holm", "Bonferroni") auf die limma-Methodennamen abbilden.
+  # Ohne Auswahl gilt BH (erster Eintrag im Dropdown).
+  limma_adjust_method <- function(choice) {
+    if (identical(choice, "Holm")) {
+      "holm"
+    } else if (identical(choice, "Bonferroni")) {
+      "bonferroni"
+    } else {
+      "BH"
+    }
+  }
+
   ## HTqPCR Single Plate
   resultHTqPCR <- reactive({
     info <- setData()
-    
+
     if (is.null(info)) {
       return(NULL)
     }
-    
-    if (input$limma_input == "dCq") {
-      dataset <- info$data.ht
-    } else {
-    }
-    
-    info2 <- info$data.ht
-    Samples <- as.character(info2$Sample)
+
+    # "dCq" ist die einzige Option für input$limma_input
+    dataset <- info$data.ht
+
     refs <- input$Refs
     multiComps <- listOfCompsMultiple()
-    adjustMethod <- input$adjustMethod
-    
+
     if (input$compType == "Single Comparison") {
       comp.type <- 1
       comps <- input$Comps
@@ -797,16 +795,9 @@ server <- function(input, output, session) {
       comp.type <- 2
       comps <- multiComps
     }
-    
-    if (input$adjustMethod == "Benjamini & Hochberg") {
-      adjustMethod <- "BH"
-    } else {
-      if (input$adjustMethod == "Holm") {
-        adjustMethod <- "holm"
-      }
-      adjustMethod <- "bonferroni"
-    }
-    
+
+    adjustMethod <- limma_adjust_method(input$adjustMethod)
+
     res <- calHTqPCR(dataset, refs, comps, comp.type, adjustMethod)
     return(res)
   })
@@ -818,13 +809,9 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    if (input$limma_inputMulti == "dCq") {
-      dataset <- info$data.ht
-    } else {
-    }
-    
-    info2 <- info$data.ht
-    Samples <- as.character(info2$Sample)
+    # "dCq" ist die einzige Option für input$limma_inputMulti
+    dataset <- info$data.ht
+
     refs <- input$RefsM
     multiComps <- listOfCompsMultipleM()
     
@@ -836,14 +823,7 @@ server <- function(input, output, session) {
       comps <- multiComps
     }
     
-    if (input$adjustMethodMulti == "Benjamini & Hochberg") {
-      adjustMethod <- "BH"
-    } else {
-      if (input$adjustMethod == "Holm") {
-        adjustMethod <- "holm"
-      }
-      adjustMethod <- "bonferroni"
-    }
+    adjustMethod <- limma_adjust_method(input$adjustMethodMulti)
     
     res <- calHTqPCR(dataset, refs, comps, comp.type, adjustMethod)
     return(res)
@@ -900,6 +880,37 @@ server <- function(input, output, session) {
   
   
   ## ddCt
+  # Anzahl gültiger Cq-Replikate des Zielgens je Sample/Gene (gleiche Regel wie read.qPCRtable: Cq > 40 gilt als NA)
+  add_replicate_n <- function(result, data, na.value = 40) {
+    counts <- data %>% filter(!is.na(Ct), Ct <= na.value) %>% count(Sample, Gene)
+    key <- function(s, g) paste(as.character(s), as.character(g), sep = "\r")
+    n <- counts$n[match(key(result$Sample, result$Gene), key(counts$Sample, counts$Gene))]
+    result$n <- ifelse(is.na(n), 0L, n)
+    result
+  }
+
+  # Hinweis auf Werte ohne SD (Ziel- oder Referenzgen mit < 2 gültigen Replikaten). Früher wurden diese
+  # Zeilen stillschweigend entfernt; jetzt bleiben sie ohne Fehlerbalken in Tabelle und Plot.
+  notify_missing_sd <- function(key, expr.abs, expr.rel) {
+    missing <- unique(c(
+      paste(expr.abs$Sample, expr.abs$Gene, sep = " / ")[is.na(expr.abs$dCt.sd)],
+      paste(expr.rel$Sample, expr.rel$Gene, sep = " / ")[is.na(expr.rel$ddCt.sd)]
+    ))
+    send_if_changed(key, missing, function() {
+      if (length(missing) > 0) {
+        shown <- if (length(missing) > 10) c(head(missing, 10), "...") else missing
+        showNotification(
+          tagList(
+            tags$b(paste0("No standard deviation for ", length(missing), " sample/gene combination(s):")),
+            tags$br(), paste(shown, collapse = ", "), tags$br(),
+            "The target or reference gene has fewer than 2 valid replicates. These values are shown without error bars."
+          ),
+          type = "warning", duration = 20
+        )
+      }
+    })
+  }
+
   resultDdct <- reactive({
     info <- setData()
     if (is.null(info)) {
@@ -920,8 +931,7 @@ server <- function(input, output, session) {
     expr.rel <- expr.rel[!expr.rel$Gene %in% refs, ] %>%
       filter(Sample != "") %>%
       filter(Gene != "") %>%
-      filter(FC != "") %>%
-      filter(FC.sd != "")
+      filter(!is.na(FC)) # Zeilen ohne SD (n < 2) bleiben erhalten
     
     expr.abs <- result.dd[, c("Sample", "Detector", "dCt", "dCt.error")] %>%
       mutate(dCt2 = dCt, dCt3 = dCt, dCt.error2 = dCt.error) # duplicate dCt results column, for transforming one of the duplicates into expressions
@@ -933,38 +943,38 @@ server <- function(input, output, session) {
     expr.abs <- expr.abs[!expr.abs$Gene %in% refs, ] %>%
       filter(Sample != "") %>%
       filter(Gene != "") %>%
-      filter(expr != "") %>%
-      filter(expr.sd != "")
+      filter(!is.na(expr)) # Zeilen ohne SD (n < 2) bleiben erhalten
     expr.abs$"-dCq" <- expr.abs$"-dCq" * -1
+
+    # Spalte n: gültige Replikate des Zielgens (Basis für SEM und Hinweis bei fehlender SD)
+    expr.abs <- add_replicate_n(expr.abs, info$analysis)
+    expr.rel <- add_replicate_n(expr.rel, info$analysis)
+    notify_missing_sd("missing_sd_single", expr.abs, expr.rel)
+
     SamplesdCt <- unique(as.character(expr.abs$Sample))
     SamplesddCt <- unique(as.character(expr.rel$Sample))
     GenesdCt <- unique(as.character(expr.abs$Gene))
     GenesddCt <- unique(as.character(expr.rel$Gene))
     
-    # Update Inputfields (Plot Settings and Input Settings)
-    updateVirtualSelect("SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
-    updateOrderInput(session, "x_order", items = SamplesdCt)
-    updateVirtualSelect("SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
-    updateOrderInput(session, "x_orderDDCt", items = SamplesddCt)
-    updateVirtualSelect("GenePicker", choices = GenesdCt, selected = GenesdCt)
-    updateVirtualSelect("GenePickerDDCt", choices = GenesddCt, selected = GenesddCt)
-    
-    #prepare ddCt output for statistical analysis
-    ddCt_stat <- expr.rel %>% select(Sample, Gene, ddCt)
-    ddCt_stat <- rename(ddCt_stat, Ct = ddCt)
-    
-    
-    fwrite(ddCt_stat, file = "ddCtsingle.csv")
-    
-    ## read to qPCR format
-    ddCt_stat_set <- NULL
-    xdata <- read.qPCRtable("ddCtsingle.csv")
-    if (!is.null(xdata)) {
-      ddCt_stat_set <- xdata$data.ht
-    }
-    
-    
-    list(relative = expr.rel, absolute = expr.abs, stat_set = ddCt_stat_set)
+    # Update Inputfields (Plot Settings and Input Settings) - only when the lists change,
+    # so user selections and the custom sample order survive a change of Refs/Mock
+    send_if_changed("SamplePicker", SamplesdCt, function() {
+      updateVirtualSelect("SamplePicker", choices = SamplesdCt, selected = SamplesdCt)
+      updateOrderInput(session, "x_order", items = SamplesdCt)
+    })
+    send_if_changed("SamplePickerDDCt", SamplesddCt, function() {
+      updateVirtualSelect("SamplePickerDDCt", choices = SamplesddCt, selected = SamplesddCt)
+      updateOrderInput(session, "x_orderDDCt", items = SamplesddCt)
+    })
+    send_if_changed("GenePicker", GenesdCt, function() {
+      updateVirtualSelect("GenePicker", choices = GenesdCt, selected = GenesdCt)
+    })
+    send_if_changed("GenePickerDDCt", GenesddCt, function() {
+      updateVirtualSelect("GenePickerDDCt", choices = GenesddCt, selected = GenesddCt)
+    })
+
+    # The former ddCt -> "ddCtsingle.csv" -> qPCRset round trip (stat_set) was never used; removed
+    list(relative = expr.rel, absolute = expr.abs)
   })
   
   
@@ -995,8 +1005,7 @@ server <- function(input, output, session) {
     expr.rel <- expr.rel[!expr.rel$Gene %in% refs, ] %>%
       filter(Sample != "") %>%
       filter(Gene != "") %>%
-      filter(FC != "") %>%
-      filter(FC.sd != "")
+      filter(!is.na(FC)) # Zeilen ohne SD (n < 2) bleiben erhalten
     
     expr.abs <- result.dd[, c("Sample", "Detector", "dCt", "dCt.error")] %>%
       mutate(dCt2 = dCt, dCt3 = dCt, dCt.error2 = dCt.error) # duplicate dCt results column, for transforming one of the duplicates into expressions
@@ -1009,23 +1018,36 @@ server <- function(input, output, session) {
     expr.abs <- expr.abs[!expr.abs$Gene %in% refs, ] %>%
       filter(Sample != "") %>%
       filter(Gene != "") %>%
-      filter(expr != "") %>%
-      filter(expr.sd != "")
+      filter(!is.na(expr)) # Zeilen ohne SD (n < 2) bleiben erhalten
     
     expr.abs$"-dCq" <- expr.abs$"-dCq" * -1
+
+    # Spalte n: gültige Replikate des Zielgens über alle Platten (bei IPC-Kalibrierung: kalibrierte Daten)
+    expr.abs <- add_replicate_n(expr.abs, info$SamplesAnalysed)
+    expr.rel <- add_replicate_n(expr.rel, info$SamplesAnalysed)
+    notify_missing_sd("missing_sd_multi", expr.abs, expr.rel)
+
     SamplesdCtMulti <- unique(as.character(expr.abs$Sample))
     SamplesddCtMulti <- unique(as.character(expr.rel$Sample))
     
     GenesdCtMulti <- unique(as.character(expr.abs$Gene))
     GenesddCtMulti <- unique(as.character(expr.rel$Gene))
     
-    # Update Inputfields (Plot Settings and Input Settings)
-    updateVirtualSelect("SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
-    updateOrderInput(session, "x_orderMulti", items = SamplesdCtMulti)
-    updateVirtualSelect("SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
-    updateOrderInput(session, "x_orderDDCtMulti", items = SamplesddCtMulti)
-    updateVirtualSelect("GenePickerMulti", choices = GenesdCtMulti, selected = GenesdCtMulti)
-    updateVirtualSelect("GenePickerDDCtMulti", choices = GenesddCtMulti, selected = GenesddCtMulti)
+    # Update Inputfields (Plot Settings and Input Settings) - only when the lists change
+    send_if_changed("SamplePickerMulti", SamplesdCtMulti, function() {
+      updateVirtualSelect("SamplePickerMulti", choices = SamplesdCtMulti, selected = SamplesdCtMulti)
+      updateOrderInput(session, "x_orderMulti", items = SamplesdCtMulti)
+    })
+    send_if_changed("SamplePickerDDCtMulti", SamplesddCtMulti, function() {
+      updateVirtualSelect("SamplePickerDDCtMulti", choices = SamplesddCtMulti, selected = SamplesddCtMulti)
+      updateOrderInput(session, "x_orderDDCtMulti", items = SamplesddCtMulti)
+    })
+    send_if_changed("GenePickerMulti", GenesdCtMulti, function() {
+      updateVirtualSelect("GenePickerMulti", choices = GenesdCtMulti, selected = GenesdCtMulti)
+    })
+    send_if_changed("GenePickerDDCtMulti", GenesddCtMulti, function() {
+      updateVirtualSelect("GenePickerDDCtMulti", choices = GenesddCtMulti, selected = GenesddCtMulti)
+    })
     
     ## updateRadioButtons(session, 'geneNameRel', choices=targets, selected=targets[1])
     ## updateCheckboxGroupInput(session, 'geneNameAbs', choices=targets, selected=targets)
@@ -1075,13 +1097,26 @@ server <- function(input, output, session) {
   
   
   interPlateCalibration <- reactive({
-    req(multiData2())
-    x <- multiData2()$SamplesNoIPCs
-    
+    # basiert auf den unkalibrierten Daten (nicht auf multiData2, das selbst die kalibrierten Werte nutzt)
+    x <- multiDataNoIPCs()
+    req(x)
+
     if (isTRUE(input$Id027)) {
       calF <- extractIPCs()
       req(calF$CalibrationFactors)
-      
+
+      # Platten ohne IPC-Werte erhalten keinen Kalibrierungsfaktor -> Cq wird dort NA
+      missing_plates <- setdiff(unique(x$PlateNumber), calF$CalibrationFactors$PlateNumber)
+      send_if_changed("IPC_missing_plates", missing_plates, function() {
+        if (length(missing_plates) > 0) {
+          showNotification(
+            paste0("No IPC values found on plate(s) ", paste(missing_plates, collapse = ", "),
+                   ": these plates cannot be calibrated, their Cq values are set to NA."),
+            type = "warning", duration = 15
+          )
+        }
+      })
+
       x %>%
         left_join(calF$CalibrationFactors, by = "PlateNumber") %>%
         # Korrektur: Ct_neu = Ct_alt - Offset
@@ -1098,9 +1133,8 @@ server <- function(input, output, session) {
     calibrated_df <- interPlateCalibration()
     req(calibrated_df)
     
-    data_orig <- multiData2()
-    req(data_orig)
-    noncalibrated_df <- data_orig$SamplesNoIPCs
+    noncalibrated_df <- multiDataNoIPCs()
+    req(noncalibrated_df)
     
     # Hilfsspalte für die Auswahl erstellen
     cal <- calibrated_df %>% unite("Sample_Gene", Sample:Gene, remove = FALSE)
@@ -1111,7 +1145,7 @@ server <- function(input, output, session) {
   
   # Separater Observer für das Update des Dropdowns
   observe({
-    info <- interPlateCalibration_Plot()
+    info <- safely(interPlateCalibration_Plot())
     req(info)
     
     choices_list <- unique(info$calibrated$Sample_Gene)
@@ -1179,66 +1213,120 @@ server <- function(input, output, session) {
   
   output$dataSinglePlate <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- readSinglePlateData()
-    if (is.null(info)) NULL
+    req(info)
     
     info$data  %>% rename(Replicate = rp.num)
     
   })
   
-  ## Raw Data Table Plate Plot Spatial Original Data
-  
-  output$plotCtCard <- renderPlotly({
-    info <- readSinglePlateData()
-    hovertext <- info$PV
-    
-    if (is.null(info)) {
-      NULL
-    } else {
-      fig <- plot_ly(as.data.frame(info$PV), x = ~num, y = ~text, z = ~Ct, type = "heatmap", xgap = 1, ygap = 1, colors = "RdYlBu", colorbar = list(title = "Cq"),
-                     hoverinfo = 'text',
-                     text = ~paste("Sample:", hovertext$Sample,
-                                   "<br>Gene:", hovertext$Gene,
-                                   "<br>Cq:", hovertext$Ct)) %>%
-        layout(
-          title = list(text = "Plate View", y=1),
-          font=t,
-          xaxis = list(side = "top", title = "", type = "linear", tickmode = "linear", showgrid = FALSE, ticks = "outside", tickwidth=2),
-          yaxis = list(autorange = "reversed", title = "", showgrid = FALSE, ticks = "outside", tickwidth=2)
-        ) %>%
-        config(
-          displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-          toImageButtonOptions = list(format = "svg", scale = 3)
-        )
-    }
-  })
-  
-  ## Raw Data Table Cq distribution Original Data
-  
-  output$plotCtDistrib <- renderPlotly({
-    info <- readSinglePlateData()
-    
-    if (is.null(info)) NULL
-    
-    fig <- ggplot(info$PV, aes(x = Ct, colour = Sample), size=0.6, scale_color_viridis()) +
-      geom_density() +
+  # --- Plot-Bausteine für Rohdaten & Qualität (ggiraph; Single und Multi Plate nutzen dieselben Funktionen) ---
+
+  qc_theme <- function() {
+    theme_classic(base_size = 12) +
+      theme(plot.title = element_text(face = "bold", hjust = 0.5),
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.title = element_text(face = "bold"))
+  }
+
+  # Plate View: Heatmap der Cq-Werte je Well. data_id = Zeilennummer in den Rohdaten, damit
+  # die per Klick ausgewählten Wells direkt als manuelle Ausschlüsse übernommen werden können.
+  plate_view_plot <- function(pv, row_id, selected = character(0)) {
+    pv <- as.data.frame(pv)
+    pv$row_id <- as.character(row_id)
+    pv$col <- as.integer(pv$num)
+    pv$row_letter <- factor(pv$text, levels = rev(sort(unique(pv$text))))
+    pv$tooltip <- paste0("<b>Well ", pv$text, pv$num, "</b><br>Sample: ", pv$Sample, "<br>Gene: ", pv$Gene,
+                         "<br>Cq: ", ifelse(is.na(pv$Ct), "NA", round(pv$Ct, 2)))
+    p <- ggplot(pv, aes(x = col, y = row_letter, fill = Ct, tooltip = tooltip, data_id = row_id)) +
+      geom_tile_interactive(color = "white", linewidth = 0.6) +
+      scale_fill_distiller(palette = "RdYlBu", direction = 1, name = "Cq", na.value = "grey85") +
+      scale_x_continuous(position = "top", breaks = sort(unique(pv$col)), expand = c(0, 0)) +
+      scale_y_discrete(expand = c(0, 0)) +
+      coord_fixed() +
+      labs(x = NULL, y = NULL, title = "Plate View") +
+      theme_minimal(base_size = 14) +
+      theme(panel.grid = element_blank(), plot.title = element_text(face = "bold", hjust = 0.5),
+            axis.text = element_text(size = 12, colour = "grey20"))
+    ratio <- length(unique(pv$text)) / length(unique(pv$col))
+    qrat_girafe(p, width_svg = 6, height_svg = 6 * ratio + 1.2,
+                selection = opts_selection(type = "multiple", selected = selected,
+                                           css = "stroke:#000000;stroke-width:3px;opacity:0.55;"))
+  }
+
+  # Cq-Verteilung je Probe; Hover hebt die Kurve einer Probe hervor
+  cq_density_plot <- function(df) {
+    df <- as.data.frame(df) %>% filter(!is.na(Ct))
+    n <- length(unique(df$Sample))
+    # Set1 hat nur 9 Farben; bei mehr Proben wird interpoliert (vorher blieben diese Kurven farblos)
+    cols <- if (n <= 9) RColorBrewer::brewer.pal(max(3, n), "Set1")[seq_len(n)] else colorRampPalette(RColorBrewer::brewer.pal(9, "Set1"))(n)
+    p <- ggplot(df, aes(x = Ct, colour = Sample)) +
+      geom_density_interactive(aes(tooltip = Sample, data_id = Sample), linewidth = 0.8) +
       geom_rug() +
-      scale_color_brewer(palette = "Set1")+
-      #theme_pubr(base_size=4.76 * .pt)+
-      list(ggplottheme)
-    
-    ggplotly(fig) %>%
-      layout(
-        title = list(text = "Cq Distribution", y=1),
-        plot_bgcolor = "transparent",
-        font=t,
-        yaxis = list(title = "Density", linewidth = 2, ticks = "outside", tickwidth=2),
-        xaxis = list(title = "Cq", linewidth = 2, ticks = "outside", tickwidth=2),
-        legend=list(title=list(text='Samples'))
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "png", scale = 3), scrollZoom = TRUE
-      )
+      scale_colour_manual(values = cols) +
+      labs(title = "Cq Distribution", x = "Cq", y = "Density", colour = "Samples") +
+      qc_theme() + theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+    qrat_girafe(p, width_svg = 6, height_svg = 4.5)
+  }
+
+  # Anzahl verwendeter (OK) und verworfener (unreliable) Replikate je Probe
+  replicate_status_plot <- function(bad, data) {
+    filtered <- bad %>% count(Sample)
+    unfiltered <- data %>% filter(!is.na(Ct)) %>% count(Sample)
+    together <- bind_rows(filtered, unfiltered, .id = "status") %>%
+      mutate(status = factor(ifelse(status == 1, "unreliable", "OK"), levels = c("OK", "unreliable")))
+    p <- ggplot(together, aes(x = Sample, y = n, fill = status,
+                              tooltip = paste0("<b>", Sample, "</b><br>", status, ": ", n), data_id = paste(Sample, status))) +
+      geom_col_interactive(position = position_stack(reverse = TRUE), color = "black", linewidth = 0.5) +
+      scale_fill_brewer(palette = "Paired", name = NULL) +
+      scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+      labs(title = "filtered/unfiltered Replicates [n]", x = NULL, y = "Count") +
+      qc_theme()
+    qrat_girafe(p, width_svg = 6, height_svg = 4.5)
+  }
+
+  # Cq-Werte je Probe und Gen (Box + einzelne Replikate)
+  replicate_boxplot <- function(data) {
+    df <- as.data.frame(data) %>% filter(!is.na(Ct))
+    plate <- if ("PlateNumber" %in% names(df)) paste0("Plate ", df$PlateNumber, ", ") else ""
+    df$tooltip <- paste0("<b>", df$Sample, " / ", df$Gene, "</b><br>", plate, "Well ", df$Well, "<br>Cq: ", round(df$Ct, 2))
+    df$point_id <- paste0("pt", seq_len(nrow(df)))
+    genes <- unique(as.character(df$Gene))
+    cols <- colorRampPalette(RColorBrewer::brewer.pal(11, "Spectral"))(max(length(genes), 2))[seq_along(genes)]
+    p <- ggplot(df, aes(x = Sample, y = Ct, fill = Gene)) +
+      geom_boxplot(position = position_dodge(0.8), outlier.shape = NA, alpha = 0.6, color = "grey25") +
+      geom_point_interactive(aes(tooltip = tooltip, data_id = point_id),
+                             position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.8, seed = 1),
+                             shape = 21, size = 1.8, color = "black") +
+      scale_fill_manual(values = setNames(cols, genes)) +
+      labs(title = "Variation within Samples", x = NULL, y = "Cq", fill = "Genes") +
+      qc_theme()
+    qrat_girafe(p, width_svg = 6, height_svg = 4.5)
+  }
+
+
+  ## Raw Data Table Plate Plot Spatial Original Data
+
+  output$plotCtCard <- renderGirafe({
+    info <- readSinglePlateData()
+    req(info)
+    # im manuellen Modus sind die ausgeschlossenen Wells vorausgewählt
+    plate_view_plot(info$PV, row_id = seq_len(nrow(info$PV)), selected = as.character(excluded_rows()))
+  })
+
+  # Ausgewählte Wells als manuelle Ausschlüsse übernehmen
+  observeEvent(input$apply_plate_selection, {
+    selected <- sort(as.integer(input$plotCtCard_selected))
+    excluded_rows(selected)
+    updateRadioButtons(session, "filterMode", selected = "manual")
+    showNotification(paste(length(selected), "wells excluded (Manual Filtering)."), type = "message")
+  })
+
+  ## Raw Data Table Cq distribution Original Data
+
+  output$plotCtDistrib <- renderGirafe({
+    info <- readSinglePlateData()
+    req(info)
+    cq_density_plot(info$PV)
   })
   
   
@@ -1246,6 +1334,7 @@ server <- function(input, output, session) {
   
   output$dataSinglePlateBadRep <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- setData()
+    req(info)
     data <- info$badReplicates %>%
       select(Well, Sample, Gene, rp.num, Cq) %>%
       rename(Replicate = rp.num)
@@ -1256,63 +1345,20 @@ server <- function(input, output, session) {
   
   ## Single Plate Filter Plot (how many replicates are neglected per sample)
   
-  output$SinglePlateFilterPlot <- renderPlotly({
+  output$SinglePlateFilterPlot <- renderGirafe({
     info <- setData()
-    if (is.null(info)) NULL
-    
-    filtered <- info$badReplicates %>%
-      count(Sample)
-    
-    unfiltered <- info$data %>%
-      filter(!is.na(Ct)) %>%
-      count(Sample)
-    
-    together <- bind_rows(filtered, unfiltered, .id = "status") %>%
-      mutate(status = replace(status, status == 1, "unreliable")) %>%
-      mutate(status = replace(status, status == 2, "OK")) %>%
-      plot_ly(
-        x = ~Sample, y = ~n, type = "bar",
-        name = ~status, color = ~status, colors = "Paired", marker = list(line = list(color = "rgba(0, 0, 0, .8)", width = 2))
-      ) %>%
-      layout(
-        title = list(text = "filtered/unfiltered Replicates [n]", y=1),
-        font=t,
-        yaxis = list(title = "Count", showgrid = FALSE, showline = TRUE, zeroline = FALSE, ticks = "outside", linewidth = 2),
-        barmode = "stack",
-        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside", tickvals = ~Sample, ticktext = ~Sample)
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3)
-      )
+    req(info)
+    replicate_status_plot(info$badReplicates, info$data)
   })
-  
-  
-  
+
+
+
   ## Single Plate Boxplot after filtering
-  
-  output$SinglePlateBoxplot <- renderPlotly({
+
+  output$SinglePlateBoxplot <- renderGirafe({
     info <- setData()
-    if (is.null(info)) NULL
-    
-    finalData <- as.data.frame(info$data) %>%
-      plot_ly(
-        x = ~Sample, y = ~Ct, color = ~Gene, type = "box", colors = "Spectral", boxpoints = "all", jitter = 0.3, pointpos = 0,
-        marker = list(line = list(color = "rgba(0, 0, 0, .8)", width = 1)),
-        line = list(color = "rgba(0, 0, 0, .8)", width = 1)
-      ) %>%
-      layout(
-        title = list(text = "Variation within Samples", y=1),
-        legend = list(title = list(text = "Genes")),
-        font=t,
-        yaxis = list(title = "Cq", showgrid = FALSE, showline = TRUE, linewidth = 2, mirror = TRUE, ticks = "outside"),
-        boxmode = "group",
-        xaxis = list(showgrid = FALSE, showline = TRUE, linewidth = 2, mirror = TRUE, ticks = "outside")
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3), scrollZoom = TRUE, displayModeBar = TRUE
-      )
+    req(info)
+    replicate_boxplot(info$data)
   })
   
   ## dCt Expression Data Table Single Plate
@@ -1324,7 +1370,7 @@ server <- function(input, output, session) {
     }
     
     info$absolute %>%
-      mutate(across(where(is.numeric), round, 2)) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
@@ -1342,6 +1388,9 @@ server <- function(input, output, session) {
                        "ddCq"     = "DDCt",
                        "MultiAbs" = "Multi",
                        "MultiRel" = "DDCtMulti",
+                       # Suffixe, unter denen der Download-Handler die Multi-Plate-Plots exportiert
+                       "Multi"     = "Multi",
+                       "DDCtMulti" = "DDCtMulti",
                        "" # Default
       )
       
@@ -1360,12 +1409,8 @@ server <- function(input, output, session) {
     legendTitle    <- get_input("legendTitle") %||% "Gene"
     legendPosition <- get_input("legendPosition") %||% "right"
     scalePick      <- get_input("scale") %||% "normal"
-    
-    formatChoice   <- input$exportFormat %||% "png"
-    PlotWidth      <- get_input("width") %||% 700
-    PlotHeight     <- get_input("height") %||% 500
-    PlotScale      <- get_input("scale_factor") %||% 1
-    
+    # (Exportformat und -größe liest der Download-Handler aus plot_format_*/plot_w_*/plot_h_*/plot_res_*)
+
     # 2. Achsen Titel
     xTitle <- if(nzchar(get_input("xlab_custom") %||% "")) get_input("xlab_custom") else "Sample"
     final_yTitle <- if(nzchar(get_input("ylab_custom") %||% "")) get_input("ylab_custom") else yTitle
@@ -1386,7 +1431,7 @@ server <- function(input, output, session) {
     GeneNames     <- as.character(unique(df$Gene))
     
     if (colorPick == "viridis") {
-      colourpalette <- viridis::viridis(numberOfGenes)
+      colourpalette <- viridisLite::viridis(numberOfGenes)
     } else {
       min_colors <- 3
       max_colors <- RColorBrewer::brewer.pal.info[colorPick, "maxcolors"] %||% 8
@@ -1403,18 +1448,21 @@ server <- function(input, output, session) {
       "<b>Sample:</b> ", df$Sample,
       "<br><b>Gene:</b> ", df$Gene,
       "<br><b>Value:</b> ", round(val_vec, 3),
-      "<br><b>Error:</b> ", round(err_vec, 3)
+      "<br><b>Error:</b> ", ifelse(is.na(err_vec), "&ndash; (no SD)", round(err_vec, 3)),
+      if (!is.null(df$n)) paste0("<br><b>n:</b> ", df$n) else ""
     )
-    
-    # 6. Plot-Basis erstellen
-    p <- ggplot(df, aes(x = Sample, y = !!sym(PlotDataCol), fill = Gene, color = Gene, group = Gene, text = tooltip_text))
-    
+    df$hover_id <- paste(df$Sample, df$Gene, sep = " / ")
+
+    # 6. Plot-Basis erstellen (interaktive ggiraph-Geoms; beim Export werden sie wie normale Geoms gezeichnet)
+    p <- ggplot(df, aes(x = Sample, y = !!sym(PlotDataCol), fill = Gene, color = Gene, group = Gene,
+                        tooltip = tooltip_text, data_id = hover_id))
+
     if (PlotType == "Bar Chart") {
-      p <- p + geom_bar(stat = "identity", position = position_dodge(0.9), width = 0.7)
+      p <- p + geom_bar_interactive(stat = "identity", position = position_dodge(0.9), width = 0.7)
     } else if (PlotType == "Boxplot") {
-      p <- p + geom_boxplot(position = position_dodge(0.9))
+      p <- p + geom_boxplot_interactive(position = position_dodge(0.9))
     } else {
-      p <- p + geom_point(position = position_dodge(0.9), size = 3)
+      p <- p + geom_point_interactive(position = position_dodge(0.9), size = 3)
     }
     
     # 7. Error Bars
@@ -1427,7 +1475,8 @@ server <- function(input, output, session) {
         width = 0.25,
         color = "black",
         position = position_dodge(0.9),
-        show.legend = FALSE
+        show.legend = FALSE,
+        na.rm = TRUE # Werte ohne SD (n < 2) erhalten keinen Fehlerbalken
       )
     }
     
@@ -1442,16 +1491,16 @@ server <- function(input, output, session) {
     
     # 9. Signifikanz Labels (Positionierung korrigiert)
     if (isTRUE(get_input("show_significance")) && !is.null(stats_df)) {
-      stats_df$signif <- symnum(stats_df$adj.p.value, corr = FALSE, na = FALSE, 
-                                cutpoints = c(0, 0.001, 0.01, 0.05, 1), 
-                                symbols = c("***", "**", "*", "ns"))
+      stats_df$signif <- signif_symbol(stats_df$adj.p.value) # same symbols as in the statistics table
       
       df_merged <- merge(df, stats_df[, c("genes", "Label", "signif")], 
                          by.x = c("Gene", "Sample"), by.y = c("genes", "Label"), all.x = TRUE)
-      
+      df_merged$signif[is.na(df_merged$signif)] <- "" # e.g. the calibrator/control has no test result
+
       p <- p + geom_text(
         data = df_merged,
-        aes(x = Sample, y = !!sym(PlotDataCol) + !!sym(PlotDataError), label = signif, group = Gene),
+        # ohne SD (n < 2) sitzt das Label direkt über dem Wert
+        aes(x = Sample, y = !!sym(PlotDataCol) + dplyr::coalesce(!!sym(PlotDataError), 0), label = signif, group = Gene),
         vjust = -0.5, 
         position = position_dodge(0.9),
         size = axis_text_size * 0.35,
@@ -1489,16 +1538,29 @@ server <- function(input, output, session) {
       p <- p + ggpubr::yscale(scalePick, .format = TRUE)
     }
     
-    # 11. Plotly Export
+    # 11. Ausgabe: ggplot-Objekt für den Export, sonst dasselbe Objekt interaktiv als SVG (ggiraph)
     if (isTRUE(export_mode)) {
       return(p) # Gibt das ggplot-Objekt zurück
     } else {
-      return(
-        ggplotly(p, tooltip = "text") %>% 
-          layout(margin = list(l = 70, r = 50, b = 100, t = 60)) %>%
-          config(displaylogo = FALSE)
-      )
+      return(qrat_girafe(p, width_svg = 10, height_svg = 5))
     }
+  }
+
+  # Gemeinsame ggiraph-Einstellungen: Tooltip, Hover-Hervorhebung, Zoom, responsive Breite.
+  # Auswahl per Klick nur dort, wo sie ausgewertet wird (Plate View), sonst deaktiviert.
+  qrat_girafe <- function(p, width_svg, height_svg, selection = opts_selection(type = "none")) {
+    girafe(
+      ggobj = p, width_svg = width_svg, height_svg = height_svg,
+      options = list(
+        opts_sizing(rescale = TRUE),
+        opts_tooltip(css = "background:#ffffff;color:#212529;border:1px solid #ced4da;border-radius:6px;padding:6px 10px;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.15);",
+                     opacity = 1, use_fill = FALSE),
+        opts_hover(css = "opacity:0.7;cursor:pointer;"),
+        selection,
+        opts_zoom(min = 1, max = 5),
+        opts_toolbar(saveaspng = TRUE, pngname = "qRAT_plot")
+      )
+    )
   }
   
   
@@ -1543,9 +1605,10 @@ server <- function(input, output, session) {
     } else col_sd
     
     # Wir geben eine Liste zurück, die alles enthält, was der Plotter braucht
+    # limma nur rechnen, wenn Signifikanz-Labels angezeigt werden
     return(list(
       plot_df = df_plot,
-      stats = calLimma(),
+      stats = if (isTRUE(input$show_significance)) safely(calLimma()) else NULL, # ohne Statistik bleibt der Plot, nur ohne Sterne
       col_val = col_val,
       err_col = err_col,
       ylab = ylab
@@ -1553,7 +1616,7 @@ server <- function(input, output, session) {
   })
   
   
-  output$dcqPlot <- renderPlotly({
+  output$dcqPlot <- renderGirafe({
     d <- prepared_dCq_data() # Reactive aufrufen
     render_qPCR_plot(d$plot_df, d$stats, d$col_val, d$err_col, d$ylab, input_type = "dCq")
   })
@@ -1594,10 +1657,10 @@ server <- function(input, output, session) {
       "sem_temp"
     } else col_sd
     
-    # Rückgabe als Liste für Plot und Export
+    # Rückgabe als Liste für Plot und Export (limma nur bei Signifikanz-Labels)
     return(list(
       plot_df = df_plot,
-      stats = calLimma(),
+      stats = if (isTRUE(input$show_significanceDDCt)) safely(calLimma()) else NULL, # ohne Statistik bleibt der Plot, nur ohne Sterne
       col_val = col_val,
       err_col = err_col,
       ylab = ylab
@@ -1607,7 +1670,7 @@ server <- function(input, output, session) {
   
   
   
-  output$ddctRelGraph2 <- renderPlotly({
+  output$ddctRelGraph2 <- renderGirafe({
     d <- prepared_ddCq_data()
     render_qPCR_plot(d$plot_df, d$stats, d$col_val, d$err_col, d$ylab, input_type = "ddCq")
   })
@@ -1624,7 +1687,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     info$relative %>%
-      mutate(across(where(is.numeric), round, 2)) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       rename(ddCq = ddCt, ddCq.sd = ddCt.sd)
   })
   
@@ -1645,60 +1708,39 @@ server <- function(input, output, session) {
   
   ## Raw Data Table Plate Plot Spatial Original Data Multiple Plates
   
-  output$MultiplotCtCard <- renderPlotly({
+  output$MultiplotCtCard <- renderGirafe({
     info <- readMPData()
-    if (is.null(info)) {
-      NULL
-    } else {
-      plateInput <- input$PlateSelect
-    }
-    
-    plateData <- info$MPV %>% filter(PlateNumber == plateInput)
-    
-    plot_ly(plateData, x = ~num, y = ~text, z = ~Ct, type = "heatmap", colors = "RdYlBu", xgap = 1, ygap = 1, colorbar = list(title = "Cq"),
-            hoverinfo = 'text',
-            text = ~paste("Sample:", plateData$Sample,
-                          "<br>Gene:", plateData$Gene,
-                          "<br>Cq:", plateData$Ct)) %>%
-      layout(
-        title = list(text = "Plate View", y=1),
-        font=t,
-        xaxis = list(side = "top", title = "", type = "linear", tickmode = "linear", showgrid = FALSE, ticks = "outside", tickwidth=2),
-        yaxis = list(autorange = "reversed", title = "", showgrid = FALSE, ticks = "outside", tickwidth=2)
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3)
-      )
+    req(info, input$PlateSelect)
+
+    # Zeilennummern beziehen sich auf alle Platten (wie excluded_rows_MP)
+    mpv <- info$MPV
+    mpv$row_id <- seq_len(nrow(mpv))
+    plateData <- mpv %>% filter(PlateNumber == input$PlateSelect)
+    req(nrow(plateData) > 0)
+
+    selected <- intersect(excluded_rows_MP(), plateData$row_id)
+    plate_view_plot(plateData, row_id = plateData$row_id, selected = as.character(selected))
   })
-  
+
+  # Ausgewählte Wells der angezeigten Platte als manuelle Ausschlüsse übernehmen
+  # (Ausschlüsse auf anderen Platten bleiben erhalten)
+  observeEvent(input$apply_plate_selection_MP, {
+    info <- safely(readMPData())
+    req(info, input$PlateSelect)
+    plate_rows <- which(info$MPV$PlateNumber == input$PlateSelect)
+    selected <- intersect(as.integer(input$MultiplotCtCard_selected), plate_rows)
+    excluded_rows_MP(sort(union(setdiff(excluded_rows_MP(), plate_rows), selected)))
+    updateRadioButtons(session, "filterModeMP", selected = "manual")
+    showNotification(paste0(length(selected), " wells on plate ", input$PlateSelect, " excluded (Manual Filtering, ",
+                            length(excluded_rows_MP()), " in total)."), type = "message")
+  })
+
   ## Raw Data Table Cq distribution Original Data Multiple Plates
-  
-  output$MultiplotCtDistrib <- renderPlotly({
+
+  output$MultiplotCtDistrib <- renderGirafe({
     info <- multiData()
-    
-    if (is.null(info)) NULL
-    
-    fig <- ggplot(info$data, aes(x = Ct, colour = Sample), size=0.6, scale_color_viridis()) +
-      geom_density() +
-      geom_rug() +
-      scale_color_brewer(palette = "Set1")+
-      #theme_pubr(base_size=4.76 * .pt)+
-      list(ggplottheme)
-    
-    ggplotly(fig) %>%
-      layout(
-        title = list(text = "Cq Distribution", y=1),
-        plot_bgcolor = "transparent",
-        font=t,
-        yaxis = list(title = "Density", linewidth = 2, ticks = "outside", tickwidth=2),
-        xaxis = list(title = "Cq", linewidth = 2, ticks = "outside", tickwidth=2),
-        legend=list(title=list(text='Samples'))
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3), scrollZoom = TRUE
-      )
+    req(info)
+    cq_density_plot(info$data)
   })
   
   
@@ -1707,6 +1749,7 @@ server <- function(input, output, session) {
   
   output$dataMultiplePlatesBadRep <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     info <- multiData()
+    req(info)
     data <- info$badReplicates %>%
       select(PlateNumber, Well, Sample, Gene, rp.num, Cq) %>%
       rename(Plate = PlateNumber, Replicate = rp.num)
@@ -1717,61 +1760,18 @@ server <- function(input, output, session) {
   
   ## Multiple Plates Filter Plot (how many replicates are neglected per sample)
   
-  output$MultiplePlatesFilterPlot <- renderPlotly({
+  output$MultiplePlatesFilterPlot <- renderGirafe({
     info <- multiData()
-    if (is.null(info)) NULL
-    
-    filtered <- info$badReplicates %>%
-      count(Sample)
-    
-    unfiltered <- info$data %>%
-      filter(!is.na(Ct)) %>%
-      count(Sample)
-    
-    together <- bind_rows(filtered, unfiltered, .id = "status") %>%
-      mutate(status = replace(status, status == 1, "unreliable")) %>%
-      mutate(status = replace(status, status == 2, "OK")) %>%
-      plot_ly(
-        x = ~Sample, y = ~n, type = "bar",
-        name = ~status, color = ~status, colors = "Paired", marker = list(line = list(color = "rgba(0, 0, 0, .8)", width = 2))
-      ) %>%
-      layout(
-        title = list(text = "filtered/unfiltered Replicates [n]", y=1),
-        font=t,
-        yaxis = list(title = "Count", showgrid = FALSE, showline = TRUE, zeroline = FALSE, ticks = "outside"),
-        barmode = "stack",
-        xaxis = list(linewidth = 2, zeroline = FALSE, ticks = "outside", tickvals = ~Sample, ticktext = ~Sample)
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3)
-      )
+    req(info)
+    replicate_status_plot(info$badReplicates, info$data)
   })
   
   ## Multiple Plate Boxplot after filtering
   
-  output$MultiplePlatesBoxplot <- renderPlotly({
+  output$MultiplePlatesBoxplot <- renderGirafe({
     info <- multiData()
-    if (is.null(info)) NULL
-    
-    finalData <- as.data.frame(info$data) %>%
-      plot_ly(
-        x = ~Sample, y = ~Ct, color = ~Gene, type = "box", colors = "Spectral", boxpoints = "all", jitter = 0.3, pointpos = 0,
-        marker = list(line = list(color = "rgba(0, 0, 0, .8)", width = 1)),
-        line = list(color = "rgba(0, 0, 0, .8)", width = 1)
-      ) %>%
-      layout(
-        title = list(text = "Variation within Samples", y=1),
-        legend = list(title = list(text = "Genes")),
-        font=t,
-        yaxis = list(title = "Cq", showgrid = FALSE, showline = TRUE, linewidth = 2, mirror = TRUE, ticks = "outside"),
-        boxmode = "group",
-        xaxis = list(showgrid = FALSE, showline = TRUE, linewidth = 2, mirror = TRUE, ticks = "outside")
-      ) %>%
-      config(
-        displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"),
-        toImageButtonOptions = list(format = "svg", scale = 3), scrollZoom = TRUE, displayModeBar = TRUE
-      )
+    req(info)
+    replicate_boxplot(info$data)
   })
   
   
@@ -1794,7 +1794,7 @@ server <- function(input, output, session) {
   output$tableCalibrationFactors <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, {
     if (input$Id027 == TRUE) {
       info <- extractIPCs()
-      data <- info$CalibrationFactors %>% mutate(across(where(is.numeric), round, 4))
+      data <- info$CalibrationFactors %>% mutate(across(where(is.numeric), ~ round(.x, 4)))
       if (is.null(info)) NULL else data
     } else {}
   })
@@ -1806,7 +1806,7 @@ server <- function(input, output, session) {
       info <- interPlateCalibration()
       data <- info %>%
         select(PlateNumber, Well, Sample, Gene, Ct, rp.num) %>%
-        mutate(across(where(is.numeric), round, 2)) %>%
+        mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
         rename(Plate = PlateNumber, Cq = Ct, Replicate = rp.num)
       if (is.null(info)) NULL else data
     } else {}
@@ -1818,7 +1818,7 @@ server <- function(input, output, session) {
   
   
   #IPC Comparison Plot
-  output$plotIPCcomparison <- renderPlotly({
+  output$plotIPCcomparison <- renderGirafe({
     req(input$SamplePickerIPCcomparison)
     info <- interPlateCalibration_Plot()
     req(info)
@@ -1840,10 +1840,13 @@ server <- function(input, output, session) {
     # Plot erstellen
     p <- ggplot(plot_df, aes(x = Status, y = Ct, color = as.factor(PlateNumber))) +
       # Boxplot für die Streuung
-      geom_boxplot(aes(fill = Status), alpha = 0.1, outlier.shape = NA, color = "grey70") +
-      # Einzelne Punkte (Replikate)
-      geom_jitter(width = 0.15, size = 2, alpha = 0.8, 
-                  aes(text = paste("Plate:", PlateNumber, "<br>Ct:", round(Ct, 2), "<br>Gene:", Gene))) +
+      # (ohne eigene Legende: Raw/Calibrated steht schon auf der x-Achse)
+      geom_boxplot(aes(fill = Status), alpha = 0.1, outlier.shape = NA, color = "grey70", show.legend = FALSE) +
+      # Einzelne Punkte (Replikate); Hover hebt alle Punkte derselben Platte hervor
+      geom_jitter_interactive(width = 0.15, size = 2, alpha = 0.8,
+                  aes(tooltip = paste0("<b>", Status, "</b><br>Plate: ", PlateNumber, "<br>Well: ", Well,
+                                       "<br>Ct: ", round(Ct, 2), "<br>Gene: ", Gene),
+                      data_id = paste("Plate", PlateNumber))) +
       
       # scales = "free_y" erlaubt jedem Gen seine eigene Y-Achse
       facet_wrap(~Sample_Gene, scales = "free_y") +
@@ -1855,8 +1858,7 @@ server <- function(input, output, session) {
             legend.position = "bottom")
     
     # Umwandlung in interaktiven Plot
-    ggplotly(p, tooltip = "text") %>% 
-      layout(margin = list(l = 50, r = 50, b = 50, t = 80))
+    qrat_girafe(p, width_svg = 9, height_svg = 6)
   })
   
   
@@ -1871,7 +1873,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     info$multiAbsolute %>%
-      mutate(across(where(is.numeric), round, 2)) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       rename(dCq = dCt, dCq.sd = dCt.sd, RQ = expr, RQ.sd = expr.sd)
   })
   
@@ -1885,7 +1887,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
     info$multiRelative %>%
-      mutate(across(where(is.numeric), round, 2)) %>%
+      mutate(across(where(is.numeric), ~ round(.x, 2))) %>%
       rename(ddCq = ddCt, ddCq.sd = ddCt.sd)
   })
   
@@ -1937,10 +1939,10 @@ server <- function(input, output, session) {
       "sem_temp"
     } else col_sd
     
-    # Rückgabe
+    # Rückgabe (limma nur bei Signifikanz-Labels)
     return(list(
       plot_df = df_plot,
-      stats = calLimmaMulti(),
+      stats = if (isTRUE(input$show_significanceMulti)) safely(calLimmaMulti()) else NULL, # ohne Statistik bleibt der Plot, nur ohne Sterne
       col_val = col_val,
       err_col = err_col,
       ylab = ylab
@@ -1948,7 +1950,7 @@ server <- function(input, output, session) {
   })
   
   
-  output$ddctMultiAbsGraph <- renderPlotly({
+  output$ddctMultiAbsGraph <- renderGirafe({
     d <- prepared_MultiAbs_data()
     # input_type "MultiAbs" nutzt den Suffix "Multi" für Title, Colors, etc.
     render_qPCR_plot(d$plot_df, d$stats, d$col_val, d$err_col, d$ylab, input_type = "MultiAbs")
@@ -1990,10 +1992,11 @@ server <- function(input, output, session) {
       df_plot$sem_temp <- df_plot[[col_sd]] / sqrt(n_val)
       "sem_temp"
     } else col_sd
-    
+
+    # limma nur bei Signifikanz-Labels
     return(list(
       plot_df = df_plot,
-      stats = calLimmaMulti(),
+      stats = if (isTRUE(input$show_significanceDDCtMulti)) safely(calLimmaMulti()) else NULL, # ohne Statistik bleibt der Plot, nur ohne Sterne
       col_val = col_val,
       err_col = err_col,
       ylab = ylab
@@ -2001,7 +2004,7 @@ server <- function(input, output, session) {
   })  
   
   
-  output$ddctRelGraphMulti <- renderPlotly({
+  output$ddctRelGraphMulti <- renderGirafe({
     d <- prepared_MultiRel_data()
     # Nutzt input_type "MultiRel" -> Suffix "DDCtMulti"
     render_qPCR_plot(d$plot_df, d$stats, d$col_val, d$err_col, d$ylab, input_type = "MultiRel")
@@ -2012,22 +2015,21 @@ server <- function(input, output, session) {
   ## MIQE Checks
   ## Single Plate MIQE check
   
-  output$SinglePlateMIQEcheck <- renderUI({
+  # Sample/Gene-Kombinationen mit < 2 gültigen technischen Replikaten (Tabelle + Statusbox teilen sich das Reactive)
+  lowReplicatesSP <- reactive({
     info <- setData()
-    
-    if (is.null(info)) {
-      NULL
-    } else {
-      countReplicates <- info$data %>%
-        filter(!is.na(Ct)) %>%
-        count(Sample, Gene) %>%
-        filter(n < 2)
-      
-      print(countReplicates)
-    }
-    
-    output$countTable <- renderDT(countReplicates)
-    
+    req(info)
+    info$data %>%
+      filter(!is.na(Ct)) %>%
+      count(Sample, Gene) %>%
+      filter(n < 2)
+  })
+
+  output$countTable <- renderDT(lowReplicatesSP())
+
+  output$SinglePlateMIQEcheck <- renderUI({
+    countReplicates <- lowReplicatesSP()
+
     if (dim(countReplicates)[1] == 0) {
       tagList(
         withTags({
@@ -2061,20 +2063,21 @@ server <- function(input, output, session) {
   
   ## Multiple Plate MIQE check
   
-  output$MultiplePlateMIQEcheck <- renderUI({
+  lowReplicatesMP <- reactive({
     info <- multiData()
-    
-    if (is.null(info)) {
-      NULL
-    } else {
-      countReplicates <- info$data %>%
-        filter(!is.na(Ct)) %>%
-        count(Sample, Gene) %>%
-        filter(n < 2)
-    }
-    
-    output$countTable <- renderDT(countReplicates)
-    
+    req(info)
+    info$data %>%
+      filter(!is.na(Ct)) %>%
+      count(Sample, Gene) %>%
+      filter(n < 2)
+  })
+
+  # eigene Output-ID, damit Single- und Multi-Plate sich die Tabelle nicht gegenseitig überschreiben
+  output$countTableMulti <- renderDT(lowReplicatesMP())
+
+  output$MultiplePlateMIQEcheck <- renderUI({
+    countReplicates <- lowReplicatesMP()
+
     if (dim(countReplicates)[1] == 0) {
       tagList(
         withTags({
@@ -2099,52 +2102,40 @@ server <- function(input, output, session) {
               div(class = "float-right", icon("xmark", "fa-3x")),
               h4(class = "alert-heading", "Replicates")
             ),
-            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), DTOutput("countTable")))
+            p(div(class = "border border-warning", strong("Following samples are below recommended number of technical replicates:"), DTOutput("countTableMulti")))
           )
         })
       )
     }
   })
-  
-  
-  
+
+
+
   ## Limma Outputs
   
   output$resultLimma <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimma()
-    if (is.null(dt)) {
-      return(NULL)
-    }
+    # Hinweis statt leerer Tabelle (z. B. nur eine Probe, kein Vergleich gewählt, keine Referenzgene)
+    validate(need(!is.null(dt), "No statistics available: select reference gene(s) and a comparison between at least two samples."))
     
     dt %>%
       select(Label, genes, t.test, p.value, adj.p.value) %>%
       rename(Sample = Label, Gene = genes) %>%
-      mutate(significance = case_when(
-        adj.p.value > 0.05 ~ "",
-        adj.p.value > 0.01 ~ "*",
-        adj.p.value > 0.001 ~ "**",
-        adj.p.value > 0.0001 ~ "***",
-        adj.p.value > 0 ~ "****")) %>%
+      mutate(significance = signif_symbol(adj.p.value)) %>% # same symbols as in the plots (qPCR.R)
       mutate(across(c("p.value", "adj.p.value"), label_pvalue(accuracy = 0.0001))) %>%
-      mutate(across(where(is.numeric), round, 4))
+      mutate(across(where(is.numeric), ~ round(.x, 4)))
   })
   
   output$resultLimmaMulti <- renderDT(extensions = c("Buttons"), options = table_options(), rownames = FALSE, filter = "top", {
     dt <- calLimmaMulti()
-    if (is.null(dt)) {
-      return(NULL)
-    }
+    # Hinweis statt leerer Tabelle (z. B. nur eine Probe, kein Vergleich gewählt, keine Referenzgene)
+    validate(need(!is.null(dt), "No statistics available: select reference gene(s) and a comparison between at least two samples."))
     dt %>%
       select(Label, genes, t.test, p.value, adj.p.value) %>%
       rename(Sample = Label, Gene = genes) %>%
-      mutate(significance = case_when(
-        adj.p.value > 0.05 ~ "",
-        adj.p.value > 0.01 ~ "*",
-        adj.p.value > 0.001 ~ "**",
-        adj.p.value > 0.0001 ~ "***",
-        adj.p.value > 0 ~ "****")) %>%
+      mutate(significance = signif_symbol(adj.p.value)) %>% # same symbols as in the plots (qPCR.R)
       mutate(across(c("p.value", "adj.p.value"), label_pvalue(accuracy = 0.0001))) %>%
-      mutate(across(where(is.numeric), round, 4))
+      mutate(across(where(is.numeric), ~ round(.x, 4)))
   })
   
   
@@ -2202,21 +2193,21 @@ server <- function(input, output, session) {
     }
   })
   
+  # Paarweise Vergleiche aus den Vergleichsboxen ("A:B,C:D", Leerzeichen -> ".").
+  # Hängt direkt von der Auswahl in den Boxen ab; vorher stand sie in isolate(), sodass eine
+  # geänderte Auswahl limma nicht neu rechnen ließ. Nur vollständige Paare (2 Proben) zählen,
+  # damit eine halb ausgefüllte Box keine fehlerhafte Kontrast-Formel erzeugt.
+  build_paired_comparisons <- function(n, prefix) {
+    if (n == 0) return(NULL)
+    pairs <- lapply(seq_len(n), function(i) input[[paste0(prefix, i)]])
+    pairs <- Filter(function(x) length(x) == 2, pairs)
+    if (length(pairs) == 0) return(NULL)
+    multiComps <- paste(vapply(pairs, paste, character(1), collapse = ":"), collapse = ",")
+    gsub(" ", ".", multiComps)
+  }
+
   listOfCompsMultiple <- reactive({
-    n <- counter$n
-    comparisonsList <- NULL
-    if (n > 0) {
-      isolate({
-        multipleComparisons <- sapply(seq_len(n), function(i) {
-          comparisonsList <- toString(AllInputs()[[paste0("CompsMultiple", i)]])
-          str_replace(comparisonsList, ", ", ":")
-        })
-        multiComps <- paste(multipleComparisons, collapse = ",")
-        multiComps <- gsub(" ", ".", multiComps, ignore.case = TRUE)
-      })
-    } else {
-      NULL
-    }
+    build_paired_comparisons(counter$n, "CompsMultiple")
   })
   
   output$comparisonBoxes_ui <- renderUI({
@@ -2227,12 +2218,9 @@ server <- function(input, output, session) {
   ### Multiple Plates
   # Track the number of input boxes to render
   counterM <- reactiveValues(n = 0)
-  
-  # Track all user inputs
-  AllInputs <- reactive({
-    x <- reactiveValuesToList(input)
-  })
-  
+
+  # (AllInputs ist oben bei Single Plate definiert)
+
   observeEvent(input$add_btnM, {
     counterM$n <- counterM$n + 1
   })
@@ -2263,20 +2251,7 @@ server <- function(input, output, session) {
   })
   
   listOfCompsMultipleM <- reactive({
-    n <- counterM$n
-    comparisonsListM <- NULL
-    if (n > 0) {
-      isolate({
-        multipleComparisonsM <- sapply(seq_len(n), function(i) {
-          comparisonsListM <- toString(AllInputs()[[paste0("CompsMultipleM", i)]])
-          str_replace(comparisonsListM, ", ", ":")
-        })
-        multiCompsM <- paste(multipleComparisonsM, collapse = ",")
-        multiCompsM <- gsub(" ", ".", multiCompsM, ignore.case = TRUE)
-      })
-    } else {
-      NULL
-    }
+    build_paired_comparisons(counterM$n, "CompsMultipleM")
   })
   
   output$comparisonBoxesM_ui <- renderUI({
@@ -2322,7 +2297,7 @@ server <- function(input, output, session) {
   # 1. Modal öffnen
   observeEvent(input$open_manual_filter, {
     req(input$dtfile)
-    info <- readSinglePlateData()
+    info <- safely(readSinglePlateData())
     df <- info$data
     if(is.null(df)) return()
     
@@ -2394,7 +2369,7 @@ server <- function(input, output, session) {
   # 1. Modal öffnen (MP)
   observeEvent(input$open_manual_filter_MP, {
     req(input$plates)
-    info <- readMPData()
+    info <- safely(readMPData())
     df <- info$data
     if(is.null(df)) return()
     
@@ -2525,12 +2500,20 @@ server <- function(input, output, session) {
     showNotification("Grouping updated.", type = "message")
   })
   
+  # Genau ein Remove-Observer pro Gruppen-ID. Vorher entstanden bei jeder Änderung neue Kopien,
+  # und ohne local() hörten alle Observer nur auf den Button der zuletzt angelegten Gruppe.
+  observed_group_ids <- character(0)
   observe({
-    for (id in active_group_ids()) {
-      observeEvent(input[[paste0("remove_grp_btn_", id)]], {
-        removeUI(selector = paste0("#group_container_", id))
-        active_group_ids(active_group_ids()[active_group_ids() != id])
-      }, ignoreInit = TRUE, once = TRUE)
+    new_ids <- setdiff(active_group_ids(), observed_group_ids)
+    observed_group_ids <<- c(observed_group_ids, new_ids)
+    for (new_id in new_ids) {
+      local({
+        id <- new_id
+        observeEvent(input[[paste0("remove_grp_btn_", id)]], {
+          removeUI(selector = paste0("#group_container_", id))
+          active_group_ids(active_group_ids()[active_group_ids() != id])
+        }, ignoreInit = TRUE)
+      })
     }
   })
   
@@ -2561,7 +2544,8 @@ server <- function(input, output, session) {
   # 1. Modal öffnen
   observeEvent(input$open_grouping_modalMulti, {
     
-    req(multiData()) 
+    mp_info <- safely(multiData())
+    req(mp_info) 
     
     removeModal() 
     
@@ -2580,9 +2564,9 @@ server <- function(input, output, session) {
     
     # Probenliste aus der multiData Reactive beziehen
     available_samples <- c("")
-    if (!is.null(multiData())) {
+    if (!is.null(mp_info)) {
       # Wir greifen auf die Spalte 'Sample' im Daten-Element der Liste zu
-      available_samples <- sort(unique(as.character(multiData()$data$Sample)))
+      available_samples <- sort(unique(as.character(mp_info$data$Sample)))
     }
     
     # Vorhandene Gruppen wiederherstellen
@@ -2604,8 +2588,9 @@ server <- function(input, output, session) {
     active_group_ids_multi(c(active_group_ids_multi(), new_id))
     
     available_samples <- c("")
-    if (!is.null(multiData())) {
-      available_samples <- sort(unique(as.character(multiData()$data$Sample)))
+    mp_info <- safely(multiData())
+    if (!is.null(mp_info)) {
+      available_samples <- sort(unique(as.character(mp_info$data$Sample)))
     }
     
     insertUI(selector = "#manual_groups_wrapper_multi", where = "beforeEnd",
@@ -2627,13 +2612,19 @@ server <- function(input, output, session) {
     showNotification("Multi-Plate Grouping updated.", type = "message")
   })
   
-  # 4. Löschen von Gruppen (dynamische Observer)
+  # 4. Löschen von Gruppen (genau ein Observer pro Gruppen-ID, siehe Single Plate)
+  observed_group_ids_multi <- character(0)
   observe({
-    for (id in active_group_ids_multi()) {
-      observeEvent(input[[paste0("remove_grp_btn_multi_", id)]], {
-        removeUI(selector = paste0("#group_container_multi_", id))
-        active_group_ids_multi(active_group_ids_multi()[active_group_ids_multi() != id])
-      }, ignoreInit = TRUE, once = TRUE)
+    new_ids <- setdiff(active_group_ids_multi(), observed_group_ids_multi)
+    observed_group_ids_multi <<- c(observed_group_ids_multi, new_ids)
+    for (new_id in new_ids) {
+      local({
+        id <- new_id
+        observeEvent(input[[paste0("remove_grp_btn_multi_", id)]], {
+          removeUI(selector = paste0("#group_container_multi_", id))
+          active_group_ids_multi(active_group_ids_multi()[active_group_ids_multi() != id])
+        }, ignoreInit = TRUE)
+      })
     }
   })
   
@@ -2643,17 +2634,19 @@ server <- function(input, output, session) {
   # 1. Dynamische Auswahl der Reference-Genes Single Plate
   observe({
     # Wir nehmen die Daten nach dem Filtering
-    req(setData())
-    available_genes <- sort(unique(as.character(setData()$data$Gene)))
+    info <- safely(setData())
+    req(info)
+    available_genes <- sort(unique(as.character(info$data$Gene)))
     
     updateVirtualSelect("ref_candidates", choices = available_genes)
   })
   
   # Dynamische Auswahl der Reference-Genes Multi Plate
   observe({
-    req(multiData2())
+    info <- safely(multiData2())
+    req(info)
     # Wir nehmen die Gene aus dem bereinigten Multi-Plate Datensatz
-    available_genes <- sort(unique(as.character(multiData2()$SamplesNoIPCs$Gene)))
+    available_genes <- sort(unique(as.character(info$SamplesNoIPCs$Gene)))
     updateVirtualSelect("ref_candidates_multi", choices = available_genes)
   })
   
@@ -2678,7 +2671,7 @@ server <- function(input, output, session) {
     
     # 3. Algorithmus ausführen
     withProgress(message = 'Calculating Stability...', value = 0.5, {
-      res <- run_normfinder_logic(ct_mat)
+      res <- run_genorm_logic(ct_mat)
       setProgress(1)
     })
     
@@ -2686,19 +2679,21 @@ server <- function(input, output, session) {
   })
   
   # Plot für die Stabilität
-  output$ref_stability_plot <- renderPlotly({
+  output$ref_stability_plot <- renderGirafe({
     res <- validationResults()
     req(res)
     
-    p <- ggplot(res, aes(x = reorder(Gene, Stability), y = Stability, fill = Stability)) +
-      geom_bar(stat = "identity", alpha = 0.8) +
+    p <- ggplot(res, aes(x = reorder(Gene, M), y = M, fill = M,
+                         tooltip = paste0("<b>", Gene, "</b><br>M value: ", round(M, 4), "<br>Rank: ", Rank),
+                         data_id = Gene)) +
+      geom_bar_interactive(stat = "identity", alpha = 0.8) +
       scale_fill_gradient(low = "#2ecc71", high = "#e74c3c") +
       theme_minimal() +
-      labs(x = "Candidate Genes", y = "Stability Value (lower is better)",
-           title = "NormFinder Ranking") +
+      labs(x = "Candidate Genes", y = "geNorm M value (lower = more stable)",
+           title = "geNorm Ranking") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    
-    ggplotly(p)
+
+    qrat_girafe(p, width_svg = 7, height_svg = 5)
   })
   
   # 3. Output: Ranking Tabelle
@@ -2714,7 +2709,7 @@ server <- function(input, output, session) {
                 pageLength = 15
               ), 
               rownames = FALSE) %>%
-      formatRound("Stability", 3)
+      formatRound("M", 3)
   }) 
   
   
@@ -2724,7 +2719,8 @@ server <- function(input, output, session) {
     candidates <- input$ref_candidates_multi
     req(candidates)
     
-    raw_df <- multiData2()$SamplesNoIPCs
+    # bei aktiver IPC-Kalibrierung die kalibrierten Cq-Werte (wie in ddCq/limma), sonst die unkalibrierten
+    raw_df <- multiData2()$SamplesCalibrated
     num_plates <- length(unique(raw_df$PlateNumber))
     
     # --- PRÜFUNG: Gene auf allen Platten vorhanden ---
@@ -2761,11 +2757,10 @@ server <- function(input, output, session) {
     rownames(ct_mat) <- wide_df$Sample
     
     withProgress(message = 'Calculating Multi-Plate Stability...', value = 0.5, {
-      res <- run_normfinder_logic(ct_mat)
+      res <- run_genorm_logic(ct_mat)
       setProgress(1)
     })
-    
-    res <- run_normfinder_logic(ct_mat)
+
     # Abdeckung hinzufügen
     coverage <- gene_presence %>% 
       mutate(Coverage = paste0(round((n_plates / num_plates) * 100), "%")) %>%
@@ -2778,27 +2773,27 @@ server <- function(input, output, session) {
   
   
   
-  output$ref_stability_plot_multi <- renderPlotly({
+  output$ref_stability_plot_multi <- renderGirafe({
     res <- validationResultsMulti()
     req(res)
     
     # Wir erstellen den Plot analog zum Single-Plate Plot, fügen aber die Coverage-Information hinzu.
-    p <- ggplot(res, aes(x = reorder(Gene, Stability), y = Stability, fill = Stability,
-                         text = paste0("Gene: ", Gene, 
-                                       "<br>Stability: ", round(Stability, 4),
-                                       "<br>Plate Coverage: ", Coverage))) +
-      geom_bar(stat = "identity", alpha = 0.8) +
+    p <- ggplot(res, aes(x = reorder(Gene, M), y = M, fill = M,
+                         tooltip = paste0("<b>", Gene, "</b>",
+                                          "<br>M value: ", round(M, 4),
+                                          "<br>Plate Coverage: ", Coverage),
+                         data_id = Gene)) +
+      geom_bar_interactive(stat = "identity", alpha = 0.8) +
       # Farbskala: Grün (stabil) zu Rot (instabil)
       scale_fill_gradient(low = "#2ecc71", high = "#e74c3c") +
       theme_minimal() +
       labs(x = "Candidate Genes", 
-           y = "Stability Value (lower is better)",
-           title = "Multi-Plate NormFinder Ranking") +
+           y = "geNorm M value (lower = more stable)",
+           title = "Multi-Plate geNorm Ranking") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1),
             legend.position = "none")
     
-    # Tooltip auf unseren custom 'text' im aes() lenken
-    ggplotly(p, tooltip = "text")
+    qrat_girafe(p, width_svg = 7, height_svg = 5)
   })
   
   output$ref_ranking_table_multi <- renderDT({
@@ -2806,7 +2801,7 @@ server <- function(input, output, session) {
     req(res)
     
     datatable(res, rownames = FALSE) %>%
-      formatRound("Stability", 3) %>%
+      formatRound("M", 3) %>%
       formatStyle(
         'Coverage',
         color = styleEqual("100%", "green", "red"),
@@ -2819,44 +2814,34 @@ server <- function(input, output, session) {
   
   # --- NORMFINDER LOGIK ---
   
-  # Hilfsfunktion zur Berechnung (basiert auf dem Andersen-Algorithmus)
-  run_normfinder_logic <- function(ct_matrix, group_vector = NULL) {
-    # ct_matrix: Zeilen = Proben, Spalten = Gene
-    # group_vector: Optional für Inter-Group Variabilität
-    
-    if (is.null(group_vector)) group_vector <- rep(1, nrow(ct_matrix))
-    
-    
-    genes <- colnames(ct_matrix)
-    stability_scores <- sapply(genes, function(g) {
-      # Berechne die Abweichung des Gens zum Mittelwert aller anderen Kandidaten
-      gene_data <- ct_matrix[, g]
-      other_genes <- ct_matrix[, colnames(ct_matrix) != g]
-      if (is.vector(other_genes)) {
-        ref_line <- other_genes
-      } else {
-        ref_line <- rowMeans(other_genes, na.rm = TRUE)
-      }
-      
-      # Differenz berechnen
-      diff <- gene_data - ref_line
-      # Stabilität als SD der Differenzen
-      sd(diff, na.rm = TRUE)
-    })
-    
-    res <- data.frame(
-      Gene = genes,
-      Stability = as.numeric(stability_scores)
-    ) %>% arrange(Stability) %>%
-      mutate(Rank = row_number())
-    
-    return(res)
-  }  
+  # --- geNorm (Vandesompele et al. 2002, umgesetzt in ctrlGene) ---
+  # ct_matrix: Zeilen = Proben, Spalten = Kandidatengene (mittlere Cq je Probe).
+  # Rückgabe: Gene, M (geNorm-Stabilitätswert, kleiner = stabiler), Rank (das stabilste Paar teilt Rang 1)
+  run_genorm_logic <- function(ct_matrix) {
+    # geNorm vergleicht Gene paarweise über alle Proben und braucht daher vollständige Proben
+    ct_matrix <- ct_matrix[stats::complete.cases(ct_matrix), , drop = FALSE]
+    validate(
+      need(ncol(ct_matrix) >= 2, "geNorm needs at least two candidate genes."),
+      need(nrow(ct_matrix) >= 2, "geNorm needs at least two samples with values for all candidate genes.")
+    )
+    res <- ctrlGene::geNorm(ct_matrix, ctVal = TRUE)
+    # ctrlGene listet die schrittweise ausgeschlossenen Gene (instabilstes zuerst) und zuletzt das stabilste Paar
+    # ("A-B"); das Paar wird über die Spaltennamen bestimmt, damit Gennamen mit "-" kein Problem sind
+    singles <- as.character(res$Genes[-nrow(res)])
+    pair <- setdiff(colnames(ct_matrix), singles)
+    m_pair <- res$Avg.M[nrow(res)]
+    m_singles <- rev(res$Avg.M[-nrow(res)])
+    data.frame(
+      Gene = c(pair, rev(singles)),
+      M = c(rep(m_pair, length(pair)), m_singles),
+      Rank = c(rep(1L, length(pair)), seq_along(singles) + 1L)
+    )
+  }
   
   
   #Reference Gene Finder Apply Button Single Plate
   observeEvent(input$apply_best_ref, {
-    res <- validationResults()
+    res <- safely(validationResults())
     req(res)
     
     # Nimm die Top 2 Gene
@@ -2870,7 +2855,7 @@ server <- function(input, output, session) {
   
   #Reference Gene Finder Apply Button Multi Plate
   observeEvent(input$apply_best_ref_multi, {
-    res <- validationResultsMulti()
+    res <- safely(validationResultsMulti())
     req(res)
     
     # Die Top 2 stabilsten Gene
@@ -2887,59 +2872,37 @@ server <- function(input, output, session) {
   
   
   
-  output$algo_description <- renderUI({
+  # Erklärung des Reference Finders (Single und Multi Plate)
+  genorm_description <- function() {
     tagList(
-      tags$h5("NormFinder Algorithm", style = "color: #2c3e50;"),
-      tags$p("NormFinder is a model-based approach to identify the optimal normalization gene(s) among a set of candidate genes."),
-      
+      tags$h5("geNorm Algorithm", style = "color: #2c3e50;"),
+      tags$p("geNorm ranks candidate reference genes by their expression stability across all samples."),
+
       tags$div(
         style = "background-color: #f8f9fa; border-left: 5px solid #2ecc71; padding: 15px; margin: 10px 0;",
         tags$b("Interpretation:"),
         tags$ul(
-          tags$li(tags$b("Stability Value:"), " Represents the estimated intra- and inter-group variation. "),
-          tags$li(tags$b("Rule of Thumb:"), " A lower value indicates higher expression stability."),
-          tags$li("Values ", tags$b("< 0.15"), " are generally considered excellent for stable reference genes.")
+          tags$li(tags$b("M value:"), " average pairwise variation of a gene with all other candidate genes."),
+          tags$li(tags$b("Rule of Thumb:"), " A lower M value indicates higher expression stability."),
+          tags$li("Values ", tags$b("< 0.5"), " are generally considered stable in homogeneous samples (up to 1 in heterogeneous samples).")
         )
       ),
-      
+
       tags$h6("How it works:"),
-      tags$p("Unlike pairwise methods, NormFinder evaluates each gene's stability by comparing its variation to the average of the other genes. It is particularly robust because it can account for experimental groups (e.g., Treatment vs. Control), ensuring that a gene isn't just stable in one group but across the entire experimental setup."),
-      
+      tags$p("For every candidate, geNorm computes the standard deviation of its log-ratios with each other candidate across the samples; the mean of these values is the M value. The least stable gene is removed step by step and M is recalculated, until the two most stable genes remain (shared rank 1). The calculation uses the mean Cq per sample and gene; samples without a value for all candidate genes are skipped."),
+
       tags$hr(),
-      
+
       tags$div(
         style = "font-size: 0.85rem; color: #7f8c8d;",
-        tags$p(tags$i("Reference: Andersen CL, Jensen JL, Orntoft TF. Normalization of real-time quantitative reverse transcription-PCR data: a model-based variance estimation approach. Cancer Res. 2004."))
+        tags$p(tags$i("Reference: Vandesompele J, De Preter K, Pattyn F, et al. Accurate normalization of real-time quantitative RT-PCR data by geometric averaging of multiple internal control genes. Genome Biol. 2002;3(7):research0034."))
       )
     )
-  })
-  
-  output$algo_description_multi <- renderUI({
-    tagList(
-      tags$h5("NormFinder Algorithm", style = "color: #2c3e50;"),
-      tags$p("NormFinder is a model-based approach to identify the optimal normalization gene(s) among a set of candidate genes."),
-      
-      tags$div(
-        style = "background-color: #f8f9fa; border-left: 5px solid #2ecc71; padding: 15px; margin: 10px 0;",
-        tags$b("Interpretation:"),
-        tags$ul(
-          tags$li(tags$b("Stability Value:"), " Represents the estimated intra- and inter-group variation. "),
-          tags$li(tags$b("Rule of Thumb:"), " A lower value indicates higher expression stability."),
-          tags$li("Values ", tags$b("< 0.15"), " are generally considered excellent for stable reference genes.")
-        )
-      ),
-      
-      tags$h6("How it works:"),
-      tags$p("Unlike pairwise methods, NormFinder evaluates each gene's stability by comparing its variation to the average of the other genes. It is particularly robust because it can account for experimental groups (e.g., Treatment vs. Control), ensuring that a gene isn't just stable in one group but across the entire experimental setup."),
-      
-      tags$hr(),
-      
-      tags$div(
-        style = "font-size: 0.85rem; color: #7f8c8d;",
-        tags$p(tags$i("Reference: Andersen CL, Jensen JL, Orntoft TF. Normalization of real-time quantitative reverse transcription-PCR data: a model-based variance estimation approach. Cancer Res. 2004."))
-      )
-    )
-  })
+  }
+
+  output$algo_description <- renderUI(genorm_description())
+
+  output$algo_description_multi <- renderUI(genorm_description())
   
   
   
